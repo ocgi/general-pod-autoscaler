@@ -1,0 +1,72 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: gpa
+  namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: gpa
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+  - kind: ServiceAccount
+    name: gpa
+    namespace: kube-system
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gpa
+  namespace: kube-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gpa-service
+  template:
+    metadata:
+      labels:
+        app: gpa-service
+    spec:
+      serviceAccountName: gpa
+      containers:
+        - args:
+            - --tlscert=/root/cert.pem
+            - --tlskey=/root/key.pem
+            - --v=6
+            - --port=443
+          image: ocgi/gpa:latest
+          imagePullPolicy: Always
+          name: gpa
+          ports:
+            - containerPort: 8080
+          volumeMounts:
+            - mountPath: /root
+              name: gpasecret
+      volumes:
+        - name: gpasecret
+          secret:
+            secretName: gpa-secret
+            items:
+              - key: key.pem
+                path: key.pem
+              - key: cert.pem
+                path: cert.pem
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gpa-validator
+  namespace: kube-system
+spec:
+  selector:
+    app: gpa-service
+  ports:
+    - port: 443
+      targetPort: 443
