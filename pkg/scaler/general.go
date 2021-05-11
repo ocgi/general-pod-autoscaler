@@ -57,6 +57,7 @@ import (
 var (
 	scaleUpLimitFactor  = 2.0
 	scaleUpLimitMinimum = 4.0
+	computeByLimitsKey  = "compute-by-limits"
 )
 
 type timestampedRecommendation struct {
@@ -359,7 +360,7 @@ func (a *GeneralController) buildScalerChain(gpa *autoscaling.GeneralPodAutoscal
 // Computes the desired number of replicas for a specific gpa and metric specification,
 // returning the metric status and a proposed condition to be set on the GPA object.
 func (a *GeneralController) computeStatusForResourceMetricGeneric(currentReplicas int32, target autoscaling.MetricTarget,
-	resourceName v1.ResourceName, namespace string, container string, selector labels.Selector) (replicaCountProposal int32,
+	resourceName v1.ResourceName, namespace string, container string, selector labels.Selector, computeByLimits bool) (replicaCountProposal int32,
 	metricStatus *autoscaling.MetricValueStatus, timestampProposal time.Time, metricNameProposal string,
 	condition autoscaling.GeneralPodAutoscalerCondition, err error) {
 	if target.AverageValue != nil {
@@ -381,11 +382,16 @@ func (a *GeneralController) computeStatusForResourceMetricGeneric(currentReplica
 	}
 
 	targetUtilization := *target.AverageUtilization
-	replicaCountProposal, percentageProposal, rawProposal, timestampProposal, err := a.replicaCalc.GetResourceReplicas(currentReplicas, targetUtilization, resourceName, namespace, selector, container)
+	replicaCountProposal, percentageProposal, rawProposal, timestampProposal, err := a.replicaCalc.GetResourceReplicas(currentReplicas, targetUtilization, resourceName, namespace, selector, container, computeByLimits)
 	if err != nil {
 		return 0, nil, time.Time{}, "", condition, fmt.Errorf("failed to get %s utilization: %v", resourceName, err)
 	}
-	metricNameProposal = fmt.Sprintf("%s resource utilization (percentage of request)", resourceName)
+	computeResourceUtilizationRatioBy := "request"
+	if computeByLimits {
+		computeResourceUtilizationRatioBy = "limit"
+	}
+
+	metricNameProposal = fmt.Sprintf("%s resource utilization (percentage of %s)", resourceName, computeResourceUtilizationRatioBy)
 	status := autoscaling.MetricValueStatus{
 		AverageUtilization: &percentageProposal,
 		AverageValue:       resource.NewMilliQuantity(rawProposal, resource.DecimalSI),
@@ -562,13 +568,18 @@ func (a *GeneralController) computeStatusForResourceMetric(currentReplicas int32
 		condition = a.getUnableComputeReplicaCountCondition(gpa, "FailedGetResourceMetric", err)
 		return 0, time.Time{}, "", condition, fmt.Errorf(errMsg)
 	}
+	computeByLimits := isComputeByLimits(gpa)
 	targetUtilization := *metricSpec.Resource.Target.AverageUtilization
-	replicaCountProposal, percentageProposal, rawProposal, timestampProposal, err := a.replicaCalc.GetResourceReplicas(currentReplicas, targetUtilization, metricSpec.Resource.Name, gpa.Namespace, selector, "")
+	replicaCountProposal, percentageProposal, rawProposal, timestampProposal, err := a.replicaCalc.GetResourceReplicas(currentReplicas, targetUtilization, metricSpec.Resource.Name, gpa.Namespace, selector, "", computeByLimits)
 	if err != nil {
 		condition = a.getUnableComputeReplicaCountCondition(gpa, "FailedGetResourceMetric", err)
 		return 0, time.Time{}, "", condition, fmt.Errorf("failed to get %s utilization: %v", metricSpec.Resource.Name, err)
 	}
-	metricNameProposal = fmt.Sprintf("%s resource utilization (percentage of request)", metricSpec.Resource.Name)
+	computeResourceUtilizationRatioBy := "request"
+	if computeByLimits {
+		computeResourceUtilizationRatioBy = "limit"
+	}
+	metricNameProposal = fmt.Sprintf("%s resource utilization (percentage of %s)", metricSpec.Resource.Name, computeResourceUtilizationRatioBy)
 	*status = autoscaling.MetricStatus{
 		Type: autoscaling.ResourceMetricSourceType,
 		Resource: &autoscaling.ResourceMetricStatus{
@@ -588,7 +599,8 @@ func (a *GeneralController) computeStatusForContainerResourceMetric(currentRepli
 	metricSpec autoscaling.MetricSpec, gpa *autoscaling.GeneralPodAutoscaler,
 	selector labels.Selector, status *autoscaling.MetricStatus) (replicaCountProposal int32, timestampProposal time.Time,
 	metricNameProposal string, condition autoscaling.GeneralPodAutoscalerCondition, err error) {
-	replicaCountProposal, metricValueStatus, timestampProposal, metricNameProposal, condition, err := a.computeStatusForResourceMetricGeneric(currentReplicas, metricSpec.ContainerResource.Target, metricSpec.ContainerResource.Name, gpa.Namespace, metricSpec.ContainerResource.Container, selector)
+	computeByLimits := isComputeByLimits(gpa)
+	replicaCountProposal, metricValueStatus, timestampProposal, metricNameProposal, condition, err := a.computeStatusForResourceMetricGeneric(currentReplicas, metricSpec.ContainerResource.Target, metricSpec.ContainerResource.Name, gpa.Namespace, metricSpec.ContainerResource.Container, selector, computeByLimits)
 	if err != nil {
 		condition = a.getUnableComputeReplicaCountCondition(gpa, "FailedGetContainerResourceMetric", err)
 		return replicaCountProposal, timestampProposal, metricNameProposal, condition, err
@@ -755,7 +767,6 @@ func (a *GeneralController) reconcileAutoscaler(gpa *autoscaling.GeneralPodAutos
 	}
 
 	rescale := true
-
 	if scale.Spec.Replicas == 0 && minReplicas != 0 {
 		// Autoscaling is disabled for this resource
 		desiredReplicas = 0
@@ -1441,4 +1452,12 @@ func min(a, b int32) int32 {
 
 func isEmpty(a autoscaling.AutoScalingDrivenMode) bool {
 	return a.MetricMode == nil && a.EventMode == nil && a.TimeMode == nil && a.WebhookMode == nil
+}
+
+func isComputeByLimits(gpa *autoscaling.GeneralPodAutoscaler) bool {
+	computeByLimits := false
+	if gpa != nil && gpa.Annotations != nil {
+		computeByLimits = "true" == gpa.Annotations[computeByLimitsKey]
+	}
+	return computeByLimits
 }

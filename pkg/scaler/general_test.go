@@ -18,6 +18,7 @@ package scaler
 import (
 	"fmt"
 	"math"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -101,6 +102,7 @@ type testCase struct {
 	verifyCPUCurrent             bool
 	reportedLevels               []uint64
 	reportedCPURequests          []resource.Quantity
+	reportedCPULimits            []resource.Quantity
 	reportedPodReadiness         []v1.ConditionStatus
 	reportedPodStartTime         []metav1.Time
 	reportedPodPhase             []v1.PodPhase
@@ -110,6 +112,7 @@ type testCase struct {
 	eventCreated                 bool
 	verifyEvents                 bool
 	useMetricsAPI                bool
+	computeByLimits              bool
 	metricsTarget                []autoscalingv1alpha1.MetricSpec
 	expectedDesiredReplicas      int32
 	expectedConditions           []autoscalingv1alpha1.GeneralPodAutoscalerCondition
@@ -143,9 +146,16 @@ func (tc *testCase) computeCPUCurrent() {
 		reported += int(r)
 	}
 	requested := 0
-	for _, req := range tc.reportedCPURequests {
-		requested += int(req.MilliValue())
+	if tc.computeByLimits {
+		for _, lim := range tc.reportedCPULimits {
+			requested += int(lim.MilliValue())
+		}
+	} else {
+		for _, req := range tc.reportedCPURequests {
+			requested += int(req.MilliValue())
+		}
 	}
+
 	tc.CPUCurrent = int32(100 * reported / requested)
 }
 
@@ -213,6 +223,12 @@ func (tc *testCase) prepareTestClient(t *testing.T) (*fake.Clientset, *metricsfa
 			},
 		}
 
+		annotations := obj.Items[0].Annotations
+		if annotations == nil {
+			annotations = make(map[string]string)
+		}
+		annotations[computeByLimitsKey] = strconv.FormatBool(tc.computeByLimits)
+		obj.Items[0].Annotations = annotations
 		obj.Items[0].Spec.AutoScalingDrivenMode = autoscalingv1alpha1.AutoScalingDrivenMode{
 			MetricMode: &autoscalingv1alpha1.MetricMode{},
 		}
@@ -256,6 +272,7 @@ func (tc *testCase) prepareTestClient(t *testing.T) (*fake.Clientset, *metricsfa
 		obj := &v1.PodList{}
 
 		specifiedCPURequests := tc.reportedCPURequests != nil
+		specifiedCPULimits := tc.reportedCPULimits != nil
 
 		numPodsToCreate := int(tc.statusReplicas)
 		if specifiedCPURequests {
@@ -289,6 +306,11 @@ func (tc *testCase) prepareTestClient(t *testing.T) (*fake.Clientset, *metricsfa
 				reportedCPURequest = tc.reportedCPURequests[i]
 			}
 
+			reportedCPULimit := resource.MustParse("1.0")
+			if specifiedCPULimits {
+				reportedCPULimit = tc.reportedCPULimits[i]
+			}
+
 			pod := v1.Pod{
 				Status: v1.PodStatus{
 					Phase: podPhase,
@@ -316,6 +338,9 @@ func (tc *testCase) prepareTestClient(t *testing.T) (*fake.Clientset, *metricsfa
 							Resources: v1.ResourceRequirements{
 								Requests: v1.ResourceList{
 									v1.ResourceCPU: reportedCPURequest,
+								},
+								Limits: v1.ResourceList{
+									v1.ResourceCPU: reportedCPULimit,
 								},
 							},
 						},
@@ -635,7 +660,11 @@ func (tc *testCase) setupController(t *testing.T) (*GeneralController, informers
 		if tc.verifyEvents {
 			switch obj.Reason {
 			case "SuccessfulRescale":
-				assert.Equal(t, fmt.Sprintf("New size: %d; reason: cpu resource utilization (percentage of request) above target", tc.expectedDesiredReplicas), obj.Message)
+				computeResourceUtilizationRatioBy := "request"
+				if tc.computeByLimits {
+					computeResourceUtilizationRatioBy = "limit"
+				}
+				assert.Equal(t, fmt.Sprintf("New size: %d; reason: cpu resource utilization (percentage of %s) above target", tc.expectedDesiredReplicas, computeResourceUtilizationRatioBy), obj.Message)
 			case "DesiredReplicasComputed":
 				assert.Equal(t, fmt.Sprintf(
 					"Computed the desired num of replicas: %d (avgCPUutil: %d, current replicas: %d)",
@@ -1204,6 +1233,34 @@ func TestScaleUpByContainerResource(t *testing.T) {
 		reportedLevels:      []uint64{800, 900, 900},
 		reportedCPURequests: []resource.Quantity{resource.MustParse("1.0"), resource.MustParse("1.0"), resource.MustParse("1.0")},
 		useMetricsAPI:       true,
+	}
+	tc.runTest(t)
+}
+
+func TestScaleUpByLimits(t *testing.T) {
+	var cpuUtilization int32 = 40
+	tc := testCase{
+		minReplicas:             2,
+		maxReplicas:             6,
+		specReplicas:            2,
+		statusReplicas:          2,
+		expectedDesiredReplicas: 2,
+		computeByLimits:         true,
+		metricsTarget: []autoscalingv1alpha1.MetricSpec{{
+			Type: autoscalingv1alpha1.ContainerResourceMetricSourceType,
+			ContainerResource: &autoscalingv1alpha1.ContainerResourceMetricSource{
+				Name: v1.ResourceCPU,
+				Target: autoscalingv1alpha1.MetricTarget{
+					Type:               autoscalingv1alpha1.UtilizationMetricType,
+					AverageUtilization: &cpuUtilization,
+				},
+				Container: "container",
+			},
+		}},
+		reportedLevels:      []uint64{300, 300, 200},
+		reportedCPURequests: []resource.Quantity{resource.MustParse("0.5"), resource.MustParse("0.5"), resource.MustParse("0.5")},
+		reportedCPULimits:   []resource.Quantity{resource.MustParse("1.0"), resource.MustParse("1.0"), resource.MustParse("1.0")},
+		useMetricsAPI:       false,
 	}
 	tc.runTest(t)
 }
