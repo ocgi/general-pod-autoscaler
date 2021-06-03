@@ -1,15 +1,14 @@
 ## Introduction
 
-This a general pod autoscaler(GPA) which can be used not only for serving, also for game.
-
+General Pod Autoscaler(GPA) is a extension for [K8s HPA](https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/), which can be used not only for serving, also for game.
 
 ## Features
 
-1. Not dependent on a specified `kubernetes version`, 1.8, 1.9, 1.19 all work;
-2. Providing more metric sources including `kafka`, `redis` and so on by GPA provider;
-3. More scalable and flexible, supporting more scaling mode;
-4. Flex upgrading GPA version with restarting kubernetes core components.
-
+1. Compatible with all features of [K8s HPA v2beta2](https://github.com/kubernetes/api/blob/master/autoscaling/v2beta2);
+2. Not dependent on a specified `kubernetes version`, 1.8, 1.9, 1.19 all work;
+3. Providing more metric sources including `kafka`, `redis` and so on by GPA provider;
+4. More scalable and flexible, supporting more scaling mode, such as `webhook`, `crontab`, etc.;
+5. Flex upgrading GPA version with restarting kubernetes core components.
 
 ## How to use
 
