@@ -13,7 +13,6 @@ require (
 	github.com/json-iterator/go v1.1.10 // indirect
 	github.com/kr/text v0.2.0 // indirect
 	github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e // indirect
-	github.com/ocgi/carrier v0.0.0-20210602121257-0dd5240f9b8f // indirect
 	github.com/onsi/gomega v1.10.1 // indirect
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.0.0
