@@ -61,8 +61,9 @@ func (s *WebhookScaler) GetReplicas(gpa *autoscalingv1.GeneralPodAutoscaler, cur
 			UID:  uuid.NewUUID(),
 			Name: gpa.Spec.ScaleTargetRef.Name,
 			// gpa and workload must deploy in the same namespace
-			Namespace:  gpa.Namespace,
-			Parameters: s.modeConfig.Parameters,
+			Namespace:       gpa.Namespace,
+			Parameters:      s.modeConfig.Parameters,
+			CurrentReplicas: currentReplicas,
 		},
 		Response: nil,
 	}
