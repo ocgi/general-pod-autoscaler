@@ -22,13 +22,19 @@ import (
 )
 
 var (
+	// Version describes the components version
 	Version = "default"
-	Commit  = "default"
+	// Commit describes the components commit
+	Commit = "default"
+	// BuildTime describes the components build time
+	BuildTime = "unknow"
 )
 
+// Print prints the components version
 func Print() {
 	klog.Info(fmt.Sprintf("Version: %s", Version))
 	klog.Info(fmt.Sprintf("Commit: %s", Commit))
+	klog.Info(fmt.Sprintf("BuildTime: %s", BuildTime))
 	klog.Info(fmt.Sprintf("Go Version: %s", runtime.Version()))
 	klog.Info(fmt.Sprintf("Go OS/Arch: %s/%s", runtime.GOOS, runtime.GOARCH))
 }

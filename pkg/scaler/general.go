@@ -134,11 +134,12 @@ func NewGeneralController(
 		scaleNamespacer:              scaleNamespacer,
 		gpaNamespacer:                gpaNamespacer,
 		downscaleStabilisationWindow: downscaleStabilisationWindow,
-		queue:                        workqueue.NewNamedRateLimitingQueue(NewDefaultGPARateLimiter(resyncPeriod), "podautoscaler"),
-		mapper:                       mapper,
-		recommendations:              map[string][]timestampedRecommendation{},
-		scaleUpEvents:                map[string][]timestampedScaleEvent{},
-		scaleDownEvents:              map[string][]timestampedScaleEvent{},
+		queue: workqueue.NewNamedRateLimitingQueue(
+			NewDefaultGPARateLimiter(resyncPeriod), "podautoscaler"),
+		mapper:          mapper,
+		recommendations: map[string][]timestampedRecommendation{},
+		scaleUpEvents:   map[string][]timestampedScaleEvent{},
+		scaleDownEvents: map[string][]timestampedScaleEvent{},
 	}
 
 	gpaInformer.Informer().AddEventHandlerWithResyncPeriod(
@@ -249,13 +250,15 @@ func (a *GeneralController) processNextWorkItem() bool {
 // computeReplicasForMetrics computes the desired number of replicas for the metric specifications listed in the GPA,
 // returning the maximum  of the computed replica counts, a description of the associated metric, and the statuses of
 // all metrics computed.
-func (a *GeneralController) computeReplicasForMetrics(gpa *autoscaling.GeneralPodAutoscaler, scale *autoscalinginternal.Scale,
-	metricSpecs []autoscaling.MetricSpec) (replicas int32, metric string, statuses []autoscaling.MetricStatus, timestamp time.Time, err error) {
+func (a *GeneralController) computeReplicasForMetrics(gpa *autoscaling.GeneralPodAutoscaler,
+	scale *autoscalinginternal.Scale, metricSpecs []autoscaling.MetricSpec) (replicas int32, metric string,
+	statuses []autoscaling.MetricStatus, timestamp time.Time, err error) {
 
 	if scale.Status.Selector == "" {
 		errMsg := "selector is required"
 		a.eventRecorder.Event(gpa, v1.EventTypeWarning, "SelectorRequired", errMsg)
-		setCondition(gpa, autoscaling.ScalingActive, v1.ConditionFalse, "InvalidSelector", "the GPA target's scale is missing a selector")
+		setCondition(gpa, autoscaling.ScalingActive, v1.ConditionFalse, "InvalidSelector",
+			"the GPA target's scale is missing a selector")
 		return 0, "", nil, time.Time{}, fmt.Errorf(errMsg)
 	}
 
@@ -276,8 +279,8 @@ func (a *GeneralController) computeReplicasForMetrics(gpa *autoscaling.GeneralPo
 	var invalidMetricCondition autoscaling.GeneralPodAutoscalerCondition
 
 	for i, metricSpec := range metricSpecs {
-		replicaCountProposal, metricNameProposal, timestampProposal, condition, err := a.computeReplicasForMetric(gpa, metricSpec, specReplicas, statusReplicas, selector, &statuses[i])
-
+		replicaCountProposal, metricNameProposal, timestampProposal, condition, err := a.computeReplicasForMetric(gpa,
+			metricSpec, specReplicas, statusReplicas, selector, &statuses[i])
 		if err != nil {
 			if invalidMetricsCount <= 0 {
 				invalidMetricCondition = condition
@@ -294,22 +297,27 @@ func (a *GeneralController) computeReplicasForMetrics(gpa *autoscaling.GeneralPo
 
 	// If all metrics are invalid return error and set condition on gpa based on first invalid metric.
 	if invalidMetricsCount >= len(metricSpecs) {
-		setCondition(gpa, invalidMetricCondition.Type, invalidMetricCondition.Status, invalidMetricCondition.Reason, invalidMetricCondition.Message)
-		return 0, "", statuses, time.Time{}, fmt.Errorf("invalid metrics (%v invalid out of %v), first error is: %v", invalidMetricsCount, len(metricSpecs), invalidMetricError)
+		setCondition(gpa, invalidMetricCondition.Type, invalidMetricCondition.Status, invalidMetricCondition.Reason,
+			invalidMetricCondition.Message)
+		return 0, "", statuses, time.Time{}, fmt.Errorf("invalid metrics (%v invalid out of %v), "+
+			"first error is: %v", invalidMetricsCount, len(metricSpecs), invalidMetricError)
 	}
-	setCondition(gpa, autoscaling.ScalingActive, v1.ConditionTrue, "ValidMetricFound", "the GPA was able to successfully calculate a replica count from %s", metric)
+	setCondition(gpa, autoscaling.ScalingActive, v1.ConditionTrue, "ValidMetricFound",
+		"the GPA was able to successfully calculate a replica count from %s", metric)
 	return replicas, metric, statuses, timestamp, nil
 }
 
 // computeReplicasForSimple computes the desired number of replicas for the metric specifications listed in the GPA,
 // returning the maximum  of the computed replica counts, a description of the associated metric, and the statuses of
 // all metrics computed.
-func (a *GeneralController) computeReplicasForSimple(gpa *autoscaling.GeneralPodAutoscaler, scale *autoscalinginternal.Scale) (replicas int32, metric string, statuses []autoscaling.MetricStatus, timestamp time.Time, err error) {
-
+func (a *GeneralController) computeReplicasForSimple(gpa *autoscaling.GeneralPodAutoscaler,
+	scale *autoscalinginternal.Scale) (replicas int32, metric string, statuses []autoscaling.MetricStatus,
+	timestamp time.Time, err error) {
 	if scale.Status.Selector == "" {
 		errMsg := "selector is required"
 		a.eventRecorder.Event(gpa, v1.EventTypeWarning, "SelectorRequired", errMsg)
-		setCondition(gpa, autoscaling.ScalingActive, v1.ConditionFalse, "InvalidSelector", "the GPA target's scale is missing a selector")
+		setCondition(gpa, autoscaling.ScalingActive, v1.ConditionFalse, "InvalidSelector",
+			"the GPA target's scale is missing a selector")
 		return 0, "", nil, time.Time{}, fmt.Errorf(errMsg)
 	}
 
@@ -325,8 +333,9 @@ func (a *GeneralController) computeReplicasForSimple(gpa *autoscaling.GeneralPod
 
 	replicaCountProposal, modeNameProposal, err := computeDesiredSize(gpa, a.buildScalerChain(gpa), statusReplicas)
 	if err != nil {
-		setCondition(gpa, autoscaling.ScalingActive, v1.ConditionFalse, fmt.Sprintf("%v failed", modeNameProposal), fmt.Sprintf("%v failed: %v",
-			modeNameProposal, err))
+		setCondition(gpa, autoscaling.ScalingActive, v1.ConditionFalse, fmt.Sprintf("%v failed", modeNameProposal),
+			fmt.Sprintf("%v failed: %v",
+				modeNameProposal, err))
 		return 0, "", statuses, time.Time{}, fmt.Errorf("invalid mode %v, first error is: %v", modeNameProposal, err)
 	}
 	replicas = replicaCountProposal
@@ -573,8 +582,10 @@ func (a *GeneralController) computeStatusForResourceMetric(currentReplicas int32
 	return replicaCountProposal, timestampProposal, metricNameProposal, autoscaling.GeneralPodAutoscalerCondition{}, nil
 }
 
-// computeStatusForContainerResourceMetric computes the desired number of replicas for the specified metric of type ResourceMetricSourceType.
-func (a *GeneralController) computeStatusForContainerResourceMetric(currentReplicas int32, metricSpec autoscaling.MetricSpec, gpa *autoscaling.GeneralPodAutoscaler,
+// computeStatusForContainerResourceMetric computes the desired number of replicas for the specified metric of
+// type ResourceMetricSourceType.
+func (a *GeneralController) computeStatusForContainerResourceMetric(currentReplicas int32,
+	metricSpec autoscaling.MetricSpec, gpa *autoscaling.GeneralPodAutoscaler,
 	selector labels.Selector, status *autoscaling.MetricStatus) (replicaCountProposal int32, timestampProposal time.Time,
 	metricNameProposal string, condition autoscaling.GeneralPodAutoscalerCondition, err error) {
 	replicaCountProposal, metricValueStatus, timestampProposal, metricNameProposal, condition, err := a.computeStatusForResourceMetricGeneric(currentReplicas, metricSpec.ContainerResource.Target, metricSpec.ContainerResource.Name, gpa.Namespace, metricSpec.ContainerResource.Container, selector)
@@ -611,7 +622,8 @@ func (a *GeneralController) computeStatusForExternalMetric(specReplicas, statusR
 			metricSpec.External.Target.AverageValue.MilliValue(), metricSpec.External.Metric.Name, gpa.Namespace, metricSelector)
 		if err != nil {
 			condition = a.getUnableComputeReplicaCountCondition(gpa, "FailedGetExternalMetric", err)
-			return 0, time.Time{}, "", condition, fmt.Errorf("failed to get %s external metric: %v", metricSpec.External.Metric.Name, err)
+			return 0, time.Time{}, "", condition,
+			fmt.Errorf("failed to get %s external metric: %v", metricSpec.External.Metric.Name, err)
 		}
 		*status = autoscaling.MetricStatus{
 			Type: autoscaling.ExternalMetricSourceType,
@@ -625,14 +637,16 @@ func (a *GeneralController) computeStatusForExternalMetric(specReplicas, statusR
 				},
 			},
 		}
-		return replicaCountProposal, timestampProposal, fmt.Sprintf("external metric %s(%+v)", metricSpec.External.Metric.Name, metricSpec.External.Metric.Selector), autoscaling.GeneralPodAutoscalerCondition{}, nil
+		return replicaCountProposal, timestampProposal, fmt.Sprintf("external metric %s(%+v)",
+			metricSpec.External.Metric.Name, metricSpec.External.Metric.Selector), autoscaling.GeneralPodAutoscalerCondition{}, nil
 	}
 	if metricSpec.External.Target.Value != nil {
 		replicaCountProposal, utilizationProposal, timestampProposal, err := a.replicaCalc.GetExternalMetricReplicas(specReplicas,
 			metricSpec.External.Target.Value.MilliValue(), metricSpec.External.Metric.Name, gpa.Namespace, metricSelector, selector)
 		if err != nil {
 			condition = a.getUnableComputeReplicaCountCondition(gpa, "FailedGetExternalMetric", err)
-			return 0, time.Time{}, "", condition, fmt.Errorf("failed to get external metric %s: %v", metricSpec.External.Metric.Name, err)
+			return 0, time.Time{}, "", condition,
+			fmt.Errorf("failed to get external metric %s: %v", metricSpec.External.Metric.Name, err)
 		}
 		*status = autoscaling.MetricStatus{
 			Type: autoscaling.ExternalMetricSourceType,
@@ -646,7 +660,9 @@ func (a *GeneralController) computeStatusForExternalMetric(specReplicas, statusR
 				},
 			},
 		}
-		return replicaCountProposal, timestampProposal, fmt.Sprintf("external metric %s(%+v)", metricSpec.External.Metric.Name, metricSpec.External.Metric.Selector), autoscaling.GeneralPodAutoscalerCondition{}, nil
+		return replicaCountProposal, timestampProposal, fmt.Sprintf("external metric %s(%+v)",
+				metricSpec.External.Metric.Name, metricSpec.External.Metric.Selector),
+			autoscaling.GeneralPodAutoscalerCondition{}, nil
 	}
 	errMsg := "invalid external metric source: neither a value target nor an average value target was set"
 	err = fmt.Errorf(errMsg)
@@ -669,7 +685,8 @@ func (a *GeneralController) reconcileAutoscaler(gpa *autoscaling.GeneralPodAutos
 	targetGV, err := schema.ParseGroupVersion(gpa.Spec.ScaleTargetRef.APIVersion)
 	if err != nil {
 		a.eventRecorder.Event(gpa, v1.EventTypeWarning, "FailedGetScale", err.Error())
-		setCondition(gpa, autoscaling.AbleToScale, v1.ConditionFalse, "FailedGetScale", "the GPA controller was unable to get the target's current scale: %v", err)
+		setCondition(gpa, autoscaling.AbleToScale, v1.ConditionFalse, "FailedGetScale",
+			"the GPA controller was unable to get the target's current scale: %v", err)
 		if updateErr := a.updateStatusIfNeeded(gpaStatusOriginal, gpa); updateErr != nil {
 			klog.Error(updateErr)
 		}
@@ -684,7 +701,8 @@ func (a *GeneralController) reconcileAutoscaler(gpa *autoscaling.GeneralPodAutos
 	mappings, err := a.mapper.RESTMappings(targetGK)
 	if err != nil {
 		a.eventRecorder.Event(gpa, v1.EventTypeWarning, "FailedGetScale", err.Error())
-		setCondition(gpa, autoscaling.AbleToScale, v1.ConditionFalse, "FailedGetScale", "the GPA controller was unable to get the target's current scale: %v", err)
+		setCondition(gpa, autoscaling.AbleToScale, v1.ConditionFalse, "FailedGetScale",
+			"the GPA controller was unable to get the target's current scale: %v", err)
 		if updateErr := a.updateStatusIfNeeded(gpaStatusOriginal, gpa); updateErr != nil {
 			klog.Error(updateErr)
 		}
@@ -694,7 +712,8 @@ func (a *GeneralController) reconcileAutoscaler(gpa *autoscaling.GeneralPodAutos
 	scale, targetGR, err := a.scaleForResourceMappings(gpa.Namespace, gpa.Spec.ScaleTargetRef.Name, mappings)
 	if err != nil {
 		a.eventRecorder.Event(gpa, v1.EventTypeWarning, "FailedGetScale", err.Error())
-		setCondition(gpa, autoscaling.AbleToScale, v1.ConditionFalse, "FailedGetScale", "the GPA controller was unable to get the target's current scale: %v", err)
+		setCondition(gpa, autoscaling.AbleToScale, v1.ConditionFalse, "FailedGetScale",
+			"the GPA controller was unable to get the target's current scale: %v", err)
 		if updateErr := a.updateStatusIfNeeded(gpaStatusOriginal, gpa); updateErr != nil {
 			klog.Error(updateErr)
 		}
@@ -712,7 +731,8 @@ func (a *GeneralController) reconcileAutoscaler(gpa *autoscaling.GeneralPodAutos
 		}
 	}
 
-	setCondition(gpa, autoscaling.AbleToScale, v1.ConditionTrue, "SucceededGetScale", "the GPA controller was able to get the target's current scale")
+	setCondition(gpa, autoscaling.AbleToScale, v1.ConditionTrue, "SucceededGetScale",
+		"the GPA controller was able to get the target's current scale")
 	currentReplicas := scale.Spec.Replicas
 	a.recordInitialRecommendation(currentReplicas, key)
 
@@ -740,7 +760,8 @@ func (a *GeneralController) reconcileAutoscaler(gpa *autoscaling.GeneralPodAutos
 		// Autoscaling is disabled for this resource
 		desiredReplicas = 0
 		rescale = false
-		setCondition(gpa, autoscaling.ScalingActive, v1.ConditionFalse, "ScalingDisabled", "scaling is disabled since the replica count of the target is zero")
+		setCondition(gpa, autoscaling.ScalingActive, v1.ConditionFalse, "ScalingDisabled",
+			"scaling is disabled since the replica count of the target is zero")
 	} else if currentReplicas > gpa.Spec.MaxReplicas {
 		rescaleReason = "Current number of replicas above Spec.MaxReplicas"
 		desiredReplicas = gpa.Spec.MaxReplicas
@@ -754,9 +775,11 @@ func (a *GeneralController) reconcileAutoscaler(gpa *autoscaling.GeneralPodAutos
 		}
 		switch {
 		case gpa.Spec.MetricMode != nil:
-			metricDesiredReplicas, metricName, metricStatuses, metricTimestamp, err = a.computeReplicasForMetrics(gpa, scale, gpa.Spec.MetricMode.Metrics)
+			metricDesiredReplicas, metricName, metricStatuses, metricTimestamp, err = a.computeReplicasForMetrics(gpa,
+				scale, gpa.Spec.MetricMode.Metrics)
 		default:
-			metricDesiredReplicas, metricName, metricStatuses, metricTimestamp, err = a.computeReplicasForSimple(gpa, scale)
+			metricDesiredReplicas, metricName, metricStatuses, metricTimestamp, err = a.computeReplicasForSimple(gpa,
+				scale)
 		}
 
 		if err != nil {
@@ -768,7 +791,8 @@ func (a *GeneralController) reconcileAutoscaler(gpa *autoscaling.GeneralPodAutos
 			return fmt.Errorf("failed to compute desired number of replicas based on listed metrics for %s: %v", reference, err)
 		}
 
-		klog.V(4).Infof("proposing %v desired replicas (based on %s from %s) for %s", metricDesiredReplicas, metricName, metricTimestamp, reference)
+		klog.V(4).Infof("proposing %v desired replicas (based on %s from %s) for %s",
+			metricDesiredReplicas, metricName, metricTimestamp, reference)
 		rescaleMetric := ""
 		if metricDesiredReplicas > desiredReplicas {
 			desiredReplicas = metricDesiredReplicas
@@ -785,7 +809,8 @@ func (a *GeneralController) reconcileAutoscaler(gpa *autoscaling.GeneralPodAutos
 		} else {
 			desiredReplicas = a.normalizeDesiredReplicasWithBehaviors(gpa, key, currentReplicas, desiredReplicas, minReplicas)
 		}
-		klog.V(4).Infof("desire: %v, current: %v, min: %v, max: %v", desiredReplicas, currentReplicas, minReplicas, gpa.Spec.MaxReplicas)
+		klog.V(4).Infof("desire: %v, current: %v, min: %v, max: %v",
+			desiredReplicas, currentReplicas, minReplicas, gpa.Spec.MaxReplicas)
 		rescale = desiredReplicas != currentReplicas
 	}
 
@@ -793,21 +818,26 @@ func (a *GeneralController) reconcileAutoscaler(gpa *autoscaling.GeneralPodAutos
 		scale.Spec.Replicas = desiredReplicas
 		_, err = a.scaleNamespacer.Scales(gpa.Namespace).Update(targetGR, scale)
 		if err != nil {
-			a.eventRecorder.Eventf(gpa, v1.EventTypeWarning, "FailedRescale", "New size: %d; reason: %s; error: %v", desiredReplicas, rescaleReason, err.Error())
-			setCondition(gpa, autoscaling.AbleToScale, v1.ConditionFalse, "FailedUpdateScale", "the GPA controller was unable to update the target scale: %v", err)
+			a.eventRecorder.Eventf(gpa, v1.EventTypeWarning, "FailedRescale",
+				"New size: %d; reason: %s; error: %v", desiredReplicas, rescaleReason, err.Error())
+			setCondition(gpa, autoscaling.AbleToScale, v1.ConditionFalse, "FailedUpdateScale",
+				"the GPA controller was unable to update the target scale: %v", err)
 			a.setCurrentReplicasInStatus(gpa, currentReplicas)
 			if err := a.updateStatusIfNeeded(gpaStatusOriginal, gpa); err != nil {
 				utilruntime.HandleError(err)
 			}
 			return fmt.Errorf("failed to rescale %s: %v", reference, err)
 		}
-		setCondition(gpa, autoscaling.AbleToScale, v1.ConditionTrue, "SucceededRescale", "the GPA controller was able to update the target scale to %d", desiredReplicas)
-		a.eventRecorder.Eventf(gpa, v1.EventTypeNormal, "SuccessfulRescale", "New size: %d; reason: %s", desiredReplicas, rescaleReason)
+		setCondition(gpa, autoscaling.AbleToScale, v1.ConditionTrue,
+			"SucceededRescale", "the GPA controller was able to update the target scale to %d", desiredReplicas)
+		a.eventRecorder.Eventf(gpa, v1.EventTypeNormal, "SuccessfulRescale",
+			"New size: %d; reason: %s", desiredReplicas, rescaleReason)
 		a.storeScaleEvent(gpa.Spec.Behavior, key, currentReplicas, desiredReplicas)
 		klog.Infof("Successful rescale of %s, old size: %d, new size: %d, reason: %s",
 			gpa.Name, currentReplicas, desiredReplicas, rescaleReason)
 	} else {
-		klog.V(4).Infof("decided not to scale %s to %v (last scale time was %s)", reference, desiredReplicas, gpa.Status.LastScaleTime)
+		klog.V(4).Infof("decided not to scale %s to %v (last scale time was %s)",
+			reference, desiredReplicas, gpa.Status.LastScaleTime)
 		desiredReplicas = currentReplicas
 	}
 	a.setStatus(gpa, currentReplicas, desiredReplicas, metricStatuses, rescale)
@@ -863,24 +893,30 @@ func (a *GeneralController) stabilizeRecommendation(key string, prenormalizedDes
 		}
 	}
 	if foundOldSample {
-		a.recommendations[key][oldSampleIndex] = timestampedRecommendation{prenormalizedDesiredReplicas, time.Now()}
+		a.recommendations[key][oldSampleIndex] = timestampedRecommendation{
+			prenormalizedDesiredReplicas, time.Now()}
 	} else {
-		a.recommendations[key] = append(a.recommendations[key], timestampedRecommendation{prenormalizedDesiredReplicas, time.Now()})
+		a.recommendations[key] = append(a.recommendations[key], timestampedRecommendation{
+			prenormalizedDesiredReplicas, time.Now()})
 	}
 	return maxRecommendation
 }
 
 // normalizeDesiredReplicas takes the metrics desired replicas value and normalizes it based on the appropriate conditions (i.e. < maxReplicas, >
 // minReplicas, etc...)
-func (a *GeneralController) normalizeDesiredReplicas(gpa *autoscaling.GeneralPodAutoscaler, key string, currentReplicas int32, prenormalizedDesiredReplicas int32, minReplicas int32) int32 {
+func (a *GeneralController) normalizeDesiredReplicas(gpa *autoscaling.GeneralPodAutoscaler,
+	key string, currentReplicas int32, prenormalizedDesiredReplicas int32, minReplicas int32) int32 {
 	stabilizedRecommendation := a.stabilizeRecommendation(key, prenormalizedDesiredReplicas)
 	if stabilizedRecommendation != prenormalizedDesiredReplicas {
-		setCondition(gpa, autoscaling.AbleToScale, v1.ConditionTrue, "ScaleDownStabilized", "recent recommendations were higher than current one, applying the highest recent recommendation")
+		setCondition(gpa, autoscaling.AbleToScale, v1.ConditionTrue, "ScaleDownStabilized",
+			"recent recommendations were higher than current one, applying the highest recent recommendation")
 	} else {
-		setCondition(gpa, autoscaling.AbleToScale, v1.ConditionTrue, "ReadyForNewScale", "recommended size matches current size")
+		setCondition(gpa, autoscaling.AbleToScale, v1.ConditionTrue, "ReadyForNewScale",
+			"recommended size matches current size")
 	}
 
-	desiredReplicas, condition, reason := convertDesiredReplicasWithRules(currentReplicas, stabilizedRecommendation, minReplicas, gpa.Spec.MaxReplicas)
+	desiredReplicas, condition, reason := convertDesiredReplicasWithRules(currentReplicas,
+		stabilizedRecommendation, minReplicas, gpa.Spec.MaxReplicas)
 
 	if desiredReplicas == stabilizedRecommendation {
 		setCondition(gpa, autoscaling.ScalingLimited, v1.ConditionFalse, condition, reason)
@@ -906,8 +942,10 @@ type NormalizationArg struct {
 // 1. Apply the basic conditions (i.e. < maxReplicas, > minReplicas, etc...)
 // 2. Apply the scale up/down limits from the gpaSpec.Behaviors (i.e. add no more than 4 pods)
 // 3. Apply the constraints period (i.e. add no more than 4 pods per minute)
-// 4. Apply the stabilization (i.e. add no more than 4 pods per minute, and pick the smallest recommendation during last 5 minutes)
-func (a *GeneralController) normalizeDesiredReplicasWithBehaviors(gpa *autoscaling.GeneralPodAutoscaler, key string, currentReplicas, prenormalizedDesiredReplicas, minReplicas int32) int32 {
+// 4. Apply the stabilization (i.e. add no more than 4 pods per minute, and pick the smallest
+//    recommendation during last 5 minutes)
+func (a *GeneralController) normalizeDesiredReplicasWithBehaviors(gpa *autoscaling.GeneralPodAutoscaler,
+	key string, currentReplicas, prenormalizedDesiredReplicas, minReplicas int32) int32 {
 	a.maybeInitScaleDownStabilizationWindow(gpa)
 	normalizationArg := NormalizationArg{
 		Key:               key,
@@ -923,7 +961,8 @@ func (a *GeneralController) normalizeDesiredReplicasWithBehaviors(gpa *autoscali
 		// "ScaleUpStabilized" || "ScaleDownStabilized"
 		setCondition(gpa, autoscaling.AbleToScale, v1.ConditionTrue, reason, message)
 	} else {
-		setCondition(gpa, autoscaling.AbleToScale, v1.ConditionTrue, "ReadyForNewScale", "recommended size matches current size")
+		setCondition(gpa, autoscaling.AbleToScale, v1.ConditionTrue, "ReadyForNewScale",
+			"recommended size matches current size")
 	}
 	desiredReplicas, reason, message := a.convertDesiredReplicasWithBehaviorRate(normalizationArg)
 	if desiredReplicas == stabilizedRecommendation {
@@ -957,7 +996,8 @@ func getReplicasChangePerPeriod(periodSeconds int32, scaleEvents []timestampedSc
 
 }
 
-func (a *GeneralController) getUnableComputeReplicaCountCondition(gpa *autoscaling.GeneralPodAutoscaler, reason string, err error) (condition autoscaling.GeneralPodAutoscalerCondition) {
+func (a *GeneralController) getUnableComputeReplicaCountCondition(gpa *autoscaling.GeneralPodAutoscaler,
+	reason string, err error) (condition autoscaling.GeneralPodAutoscalerCondition) {
 	a.eventRecorder.Event(gpa, v1.EventTypeWarning, reason, err.Error())
 	return autoscaling.GeneralPodAutoscalerCondition{
 		Type:    autoscaling.ScalingActive,
@@ -969,7 +1009,8 @@ func (a *GeneralController) getUnableComputeReplicaCountCondition(gpa *autoscali
 
 // storeScaleEvent stores (adds or replaces outdated) scale event.
 // outdated events to be replaced were marked as outdated in the `markScaleEventsOutdated` function
-func (a *GeneralController) storeScaleEvent(behavior *autoscaling.GeneralPodAutoscalerBehavior, key string, prevReplicas, newReplicas int32) {
+func (a *GeneralController) storeScaleEvent(behavior *autoscaling.GeneralPodAutoscalerBehavior,
+	key string, prevReplicas, newReplicas int32) {
 	if behavior == nil {
 		return // we should not store any event as they will not be used
 	}
@@ -1062,7 +1103,8 @@ func (a *GeneralController) convertDesiredReplicasWithBehaviorRate(args Normaliz
 	var possibleLimitingReason, possibleLimitingMessage string
 
 	if args.DesiredReplicas > args.CurrentReplicas {
-		scaleUpLimit := calculateScaleUpLimitWithScalingRules(args.CurrentReplicas, a.scaleUpEvents[args.Key], args.ScaleUpBehavior)
+		scaleUpLimit := calculateScaleUpLimitWithScalingRules(args.CurrentReplicas,
+			a.scaleUpEvents[args.Key], args.ScaleUpBehavior)
 		if scaleUpLimit < args.CurrentReplicas {
 			// We shouldn't scale up further until the scaleUpEvents will be cleaned up
 			scaleUpLimit = args.CurrentReplicas
@@ -1080,7 +1122,8 @@ func (a *GeneralController) convertDesiredReplicasWithBehaviorRate(args Normaliz
 			return maximumAllowedReplicas, possibleLimitingReason, possibleLimitingMessage
 		}
 	} else if args.DesiredReplicas < args.CurrentReplicas {
-		scaleDownLimit := calculateScaleDownLimitWithBehaviors(args.CurrentReplicas, a.scaleDownEvents[args.Key], args.ScaleDownBehavior)
+		scaleDownLimit := calculateScaleDownLimitWithBehaviors(args.CurrentReplicas,
+			a.scaleDownEvents[args.Key], args.ScaleDownBehavior)
 		if scaleDownLimit > args.CurrentReplicas {
 			// We shouldn't scale down further until the scaleDownEvents will be cleaned up
 			scaleDownLimit = args.CurrentReplicas
@@ -1102,7 +1145,8 @@ func (a *GeneralController) convertDesiredReplicasWithBehaviorRate(args Normaliz
 }
 
 // computeDesiredSize computes the new desired size of the given fleet
-func computeDesiredSize(gpa *autoscaling.GeneralPodAutoscaler, scalers []scalercore.Scaler, currentReplicas int32) (int32, string, error) {
+func computeDesiredSize(gpa *autoscaling.GeneralPodAutoscaler,
+	scalers []scalercore.Scaler, currentReplicas int32) (int32, string, error) {
 	var (
 		replicas int32
 		errs     error
@@ -1126,9 +1170,10 @@ func computeDesiredSize(gpa *autoscaling.GeneralPodAutoscaler, scalers []scalerc
 	return replicas, name, errs
 }
 
-// convertDesiredReplicas performs the actual normalization, without depending on `GeneralController` or `GeneralPodAutoscaler`
-func convertDesiredReplicasWithRules(currentReplicas, desiredReplicas, gpaMinReplicas, gpaMaxReplicas int32) (int32, string, string) {
-
+// convertDesiredReplicas performs the actual normalization,
+// without depending on `GeneralController` or `GeneralPodAutoscaler`
+func convertDesiredReplicasWithRules(currentReplicas, desiredReplicas,
+	gpaMinReplicas, gpaMaxReplicas int32) (int32, string, string) {
 	var minimumAllowedReplicas int32
 	var maximumAllowedReplicas int32
 
@@ -1189,8 +1234,10 @@ func getLongestPolicyPeriod(scalingRules *autoscaling.GPAScalingRules) int32 {
 	return longestPolicyPeriod
 }
 
-// calculateScaleUpLimitWithScalingRules returns the maximum number of pods that could be added for the given GPAScalingRules
-func calculateScaleUpLimitWithScalingRules(currentReplicas int32, scaleEvents []timestampedScaleEvent, scalingRules *autoscaling.GPAScalingRules) int32 {
+// calculateScaleUpLimitWithScalingRules returns the maximum number of pods
+// that could be added for the given GPAScalingRules
+func calculateScaleUpLimitWithScalingRules(currentReplicas int32, scaleEvents []timestampedScaleEvent,
+	scalingRules *autoscaling.GPAScalingRules) int32 {
 	var result int32
 	var proposed int32
 	var selectPolicyFn func(int32, int32) int32
@@ -1207,7 +1254,8 @@ func calculateScaleUpLimitWithScalingRules(currentReplicas int32, scaleEvents []
 		if policy.Type == autoscaling.PodsScalingPolicy {
 			proposed = int32(periodStartReplicas + policy.Value)
 		} else if policy.Type == autoscaling.PercentScalingPolicy {
-			// the proposal has to be rounded up because the proposed change might not increase the replica count causing the target to never scale up
+			// the proposal has to be rounded up because the proposed change might not increase the replica count
+			// causing the target to never scale up
 			proposed = int32(math.Ceil(float64(periodStartReplicas) * (1 + float64(policy.Value)/100)))
 		}
 		result = selectPolicyFn(result, proposed)
@@ -1215,8 +1263,10 @@ func calculateScaleUpLimitWithScalingRules(currentReplicas int32, scaleEvents []
 	return result
 }
 
-// calculateScaleDownLimitWithBehavior returns the maximum number of pods that could be deleted for the given GPAScalingRules
-func calculateScaleDownLimitWithBehaviors(currentReplicas int32, scaleEvents []timestampedScaleEvent, scalingRules *autoscaling.GPAScalingRules) int32 {
+// calculateScaleDownLimitWithBehavior returns the maximum number of pods
+// that could be deleted for the given GPAScalingRules
+func calculateScaleDownLimitWithBehaviors(currentReplicas int32, scaleEvents []timestampedScaleEvent,
+	scalingRules *autoscaling.GPAScalingRules) int32 {
 	var result int32 = math.MaxInt32
 	var proposed int32
 	var selectPolicyFn func(int32, int32) int32
@@ -1245,7 +1295,8 @@ func calculateScaleDownLimitWithBehaviors(currentReplicas int32, scaleEvents []t
 // in turn until a working one is found.  If none work, the first error
 // is returned.  It returns both the scale, as well as the group-resource from
 // the working mapping.
-func (a *GeneralController) scaleForResourceMappings(namespace, name string, mappings []*apimeta.RESTMapping) (*autoscalinginternal.Scale, schema.GroupResource, error) {
+func (a *GeneralController) scaleForResourceMappings(namespace, name string,
+	mappings []*apimeta.RESTMapping) (*autoscalinginternal.Scale, schema.GroupResource, error) {
 	var firstErr error
 	for i, mapping := range mappings {
 		targetGR := mapping.Resource.GroupResource()
@@ -1276,7 +1327,8 @@ func (a *GeneralController) setCurrentReplicasInStatus(gpa *autoscaling.GeneralP
 
 // setStatus recreates the status of the given GPA, updating the current and
 // desired replicas, as well as the metric statuses
-func (a *GeneralController) setStatus(gpa *autoscaling.GeneralPodAutoscaler, currentReplicas, desiredReplicas int32, metricStatuses []autoscaling.MetricStatus, rescale bool) {
+func (a *GeneralController) setStatus(gpa *autoscaling.GeneralPodAutoscaler, currentReplicas,
+	desiredReplicas int32, metricStatuses []autoscaling.MetricStatus, rescale bool) {
 	gpa.Status = autoscaling.GeneralPodAutoscalerStatus{
 		CurrentReplicas: currentReplicas,
 		DesiredReplicas: desiredReplicas,
@@ -1294,7 +1346,8 @@ func (a *GeneralController) setStatus(gpa *autoscaling.GeneralPodAutoscaler, cur
 }
 
 // updateStatusIfNeeded calls updateStatus only if the status of the new GPA is not the same as the old status
-func (a *GeneralController) updateStatusIfNeeded(oldStatus *autoscaling.GeneralPodAutoscalerStatus, newGPA *autoscaling.GeneralPodAutoscaler) error {
+func (a *GeneralController) updateStatusIfNeeded(oldStatus *autoscaling.GeneralPodAutoscalerStatus,
+	newGPA *autoscaling.GeneralPodAutoscaler) error {
 	// skip a write if we wouldn't need to update
 	if apiequality.Semantic.DeepEqual(oldStatus, &newGPA.Status) {
 		return nil
@@ -1333,15 +1386,17 @@ func (a *GeneralController) pathStatus(gpa *autoscaling.GeneralPodAutoscaler, pa
 // setCondition sets the specific condition type on the given GPA to the specified value with the given reason
 // and message.  The message and args are treated like a format string.  The condition will be added if it is
 // not present.
-func setCondition(gpa *autoscaling.GeneralPodAutoscaler, conditionType autoscaling.GeneralPodAutoscalerConditionType, status v1.ConditionStatus,
-	reason, message string, args ...interface{}) {
+func setCondition(gpa *autoscaling.GeneralPodAutoscaler, conditionType autoscaling.GeneralPodAutoscalerConditionType,
+	status v1.ConditionStatus, reason, message string, args ...interface{}) {
 	gpa.Status.Conditions = setConditionInList(gpa.Status.Conditions, conditionType, status, reason, message, args...)
 }
 
 // setConditionInList sets the specific condition type on the given GPA to the specified value with the given
 // reason and message.  The message and args are treated like a format string.  The condition will be added if
 // it is not present.  The new list will be returned.
-func setConditionInList(inputList []autoscaling.GeneralPodAutoscalerCondition, conditionType autoscaling.GeneralPodAutoscalerConditionType, status v1.ConditionStatus, reason, message string, args ...interface{}) []autoscaling.GeneralPodAutoscalerCondition {
+func setConditionInList(inputList []autoscaling.GeneralPodAutoscalerCondition,
+	conditionType autoscaling.GeneralPodAutoscalerConditionType, status v1.ConditionStatus, reason, message string,
+	args ...interface{}) []autoscaling.GeneralPodAutoscalerCondition {
 	resList := inputList
 	var existingCond *autoscaling.GeneralPodAutoscalerCondition
 	for i, condition := range resList {
