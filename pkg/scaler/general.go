@@ -801,7 +801,10 @@ func (a *GeneralController) reconcileAutoscaler(gpa *autoscaling.GeneralPodAutos
 			a.eventRecorder.Event(gpa, v1.EventTypeWarning, "FailedComputeMetricsReplicas", err.Error())
 			return fmt.Errorf("failed to compute desired number of replicas based on listed metrics for %s: %v", reference, err)
 		}
-
+		//Record event when the metricDesiredReplicas is greater than gpa.Spec.MaxReplicas
+		if metricDesiredReplicas > gpa.Spec.MaxReplicas {
+			a.eventRecorder.Eventf(gpa, v1.EventTypeWarning, "FailedRescale", "DesiredReplicas:%v cannot exceed the MaxReplicas: %v", metricDesiredReplicas, gpa.Spec.MaxReplicas)
+		}
 		klog.V(4).Infof("proposing %v desired replicas (based on %s from %s) for %s",
 			metricDesiredReplicas, metricName, metricTimestamp, reference)
 		rescaleMetric := ""
