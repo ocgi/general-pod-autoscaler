@@ -618,24 +618,13 @@ func (a *GeneralController) computeStatusForContainerResourceMetric(currentRepli
 
 // computeStatusForExternalMetric computes the desired number of replicas for the specified metric of type ExternalMetricSourceType.
 func (a *GeneralController) computeStatusForExternalMetric(specReplicas, statusReplicas int32, metricSpec autoscaling.MetricSpec, gpa *autoscaling.GeneralPodAutoscaler, selector labels.Selector, status *autoscaling.MetricStatus) (replicaCountProposal int32, timestampProposal time.Time, metricNameProposal string, condition autoscaling.GeneralPodAutoscalerCondition, err error) {
-	metricSelector := metricSpec.External.Metric.Selector
-	if metricSelector == nil || len(metricSelector.MatchLabels) == 0 {
-		selectorMap, err := labels.ConvertSelectorToLabelsMap(selector.String())
-		if err != nil {
-			klog.Error(err)
-		}
-
-		metricSelector = &metav1.LabelSelector{
-			MatchLabels: selectorMap,
-		}
-	}
 	if metricSpec.External.Target.AverageValue != nil {
 		replicaCountProposal, utilizationProposal, timestampProposal, err := a.replicaCalc.GetExternalPerPodMetricReplicas(statusReplicas,
-			metricSpec.External.Target.AverageValue.MilliValue(), metricSpec.External.Metric.Name, gpa.Namespace, metricSelector)
+			metricSpec.External.Target.AverageValue.MilliValue(), metricSpec.External.Metric.Name, gpa.Namespace, metricSpec.External.Metric.Selector)
 		if err != nil {
 			condition = a.getUnableComputeReplicaCountCondition(gpa, "FailedGetExternalMetric", err)
 			return 0, time.Time{}, "", condition,
-			fmt.Errorf("failed to get %s external metric: %v", metricSpec.External.Metric.Name, err)
+				fmt.Errorf("failed to get %s external metric: %v", metricSpec.External.Metric.Name, err)
 		}
 		*status = autoscaling.MetricStatus{
 			Type: autoscaling.ExternalMetricSourceType,
@@ -654,11 +643,11 @@ func (a *GeneralController) computeStatusForExternalMetric(specReplicas, statusR
 	}
 	if metricSpec.External.Target.Value != nil {
 		replicaCountProposal, utilizationProposal, timestampProposal, err := a.replicaCalc.GetExternalMetricReplicas(specReplicas,
-			metricSpec.External.Target.Value.MilliValue(), metricSpec.External.Metric.Name, gpa.Namespace, metricSelector, selector)
+			metricSpec.External.Target.Value.MilliValue(), metricSpec.External.Metric.Name, gpa.Namespace, metricSpec.External.Metric.Selector, selector)
 		if err != nil {
 			condition = a.getUnableComputeReplicaCountCondition(gpa, "FailedGetExternalMetric", err)
 			return 0, time.Time{}, "", condition,
-			fmt.Errorf("failed to get external metric %s: %v", metricSpec.External.Metric.Name, err)
+				fmt.Errorf("failed to get external metric %s: %v", metricSpec.External.Metric.Name, err)
 		}
 		*status = autoscaling.MetricStatus{
 			Type: autoscaling.ExternalMetricSourceType,
