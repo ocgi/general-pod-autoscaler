@@ -46,4 +46,7 @@ func RecommendedDefaultGPAControllerConfiguration(obj *v1alpha1.GPAControllerCon
 	if obj.GeneralPodAutoscalerTolerance == 0 {
 		obj.GeneralPodAutoscalerTolerance = 0.1
 	}
+	if obj.GeneralPodAutoscalerWorkers == 0 {
+		obj.GeneralPodAutoscalerWorkers = 1
+	}
 }

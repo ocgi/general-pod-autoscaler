@@ -142,7 +142,6 @@ func (c *ReplicaCalculator) GetResourceReplicas(currentReplicas int32, targetUti
 			metrics[podName] = metricsclient.PodMetric{Value: 0}
 		}
 	}
-
 	// re-run the utilization calculation with our new numbers
 	newUsageRatio, _, _, err := metricsclient.GetResourceUtilizationRatio(metrics, requests, targetUtilization)
 	if err != nil {

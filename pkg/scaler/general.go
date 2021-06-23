@@ -100,11 +100,20 @@ type GeneralController struct {
 	// Latest unstabilized recommendations for each autoscaler.
 	recommendations map[string][]timestampedRecommendation
 
+	// Multi goroutine read and write recommendations may unsafe.
+	recommendationsLock sync.Mutex
+
 	// Latest autoscaler events
 	scaleUpEvents   map[string][]timestampedScaleEvent
 	scaleDownEvents map[string][]timestampedScaleEvent
 
+	// Multi goroutine read and write events may unsafe.
+	scaleUpEventsLock   sync.Mutex
+	scaleDownEventsLock sync.Mutex
+
 	doingCron sync.Map
+
+	workers int
 }
 
 // NewGeneralController creates a new GeneralController.
@@ -121,7 +130,7 @@ func NewGeneralController(
 	tolerance float64,
 	cpuInitializationPeriod,
 	delayOfInitialReadinessStatus time.Duration,
-
+	workers int,
 ) *GeneralController {
 	s := scheme.Scheme
 	s.AddKnownTypes(autoscaling.SchemeGroupVersion, &autoscaling.GeneralPodAutoscaler{})
@@ -141,6 +150,7 @@ func NewGeneralController(
 		recommendations: map[string][]timestampedRecommendation{},
 		scaleUpEvents:   map[string][]timestampedScaleEvent{},
 		scaleDownEvents: map[string][]timestampedScaleEvent{},
+		workers:         workers,
 	}
 
 	gpaInformer.Informer().AddEventHandlerWithResyncPeriod(
@@ -174,15 +184,17 @@ func (a *GeneralController) Run(stopCh <-chan struct{}) {
 	defer utilruntime.HandleCrash()
 	defer a.queue.ShutDown()
 
-	klog.Infof("Starting GPA controller")
+	klog.Infof("Starting GPA controller, workers is %v", a.workers)
 	defer klog.Infof("Shutting down GPA controller")
 
 	if !cache.WaitForNamedCacheSync("GPA", stopCh, a.gpaListerSynced, a.podListerSynced) {
 		return
 	}
+	// start some workers
+	for i := 0; i < a.workers; i++ {
+		go wait.Until(a.worker, time.Second, stopCh)
+	}
 
-	// start a single worker (we may wish to start more in the future)
-	go wait.Until(a.worker, time.Second, stopCh)
 	<-stopCh
 }
 
@@ -672,6 +684,10 @@ func (a *GeneralController) computeStatusForExternalMetric(specReplicas, statusR
 }
 
 func (a *GeneralController) recordInitialRecommendation(currentReplicas int32, key string) {
+	//add lock
+	a.recommendationsLock.Lock()
+	defer a.recommendationsLock.Unlock()
+
 	if a.recommendations[key] == nil {
 		a.recommendations[key] = []timestampedRecommendation{{currentReplicas, time.Now()}}
 	}
@@ -883,6 +899,10 @@ func (a *GeneralController) updateLabelsIfNeeded(gpa *autoscaling.GeneralPodAuto
 // - replaces old recommendation with the newest recommendation,
 // - returns max of recommendations that are not older than downscaleStabilisationWindow.
 func (a *GeneralController) stabilizeRecommendation(key string, prenormalizedDesiredReplicas int32) int32 {
+	//add lock
+	a.recommendationsLock.Lock()
+	defer a.recommendationsLock.Unlock()
+
 	maxRecommendation := prenormalizedDesiredReplicas
 	foundOldSample := false
 	oldSampleIndex := 0
@@ -1021,6 +1041,9 @@ func (a *GeneralController) storeScaleEvent(behavior *autoscaling.GeneralPodAuto
 	var longestPolicyPeriod int32
 	foundOldSample := false
 	if newReplicas > prevReplicas {
+		a.scaleUpEventsLock.Lock()
+		defer a.scaleUpEventsLock.Unlock()
+
 		longestPolicyPeriod = getLongestPolicyPeriod(behavior.ScaleUp)
 		markScaleEventsOutdated(a.scaleUpEvents[key], longestPolicyPeriod)
 		replicaChange := newReplicas - prevReplicas
@@ -1037,6 +1060,9 @@ func (a *GeneralController) storeScaleEvent(behavior *autoscaling.GeneralPodAuto
 			a.scaleUpEvents[key] = append(a.scaleUpEvents[key], newEvent)
 		}
 	} else {
+		a.scaleDownEventsLock.Lock()
+		defer a.scaleDownEventsLock.Unlock()
+
 		longestPolicyPeriod = getLongestPolicyPeriod(behavior.ScaleDown)
 		markScaleEventsOutdated(a.scaleDownEvents[key], longestPolicyPeriod)
 		replicaChange := prevReplicas - newReplicas
@@ -1104,8 +1130,10 @@ func (a *GeneralController) stabilizeRecommendationWithBehaviors(args Normalizat
 // It doesn't consider the stabilizationWindow, it is done separately
 func (a *GeneralController) convertDesiredReplicasWithBehaviorRate(args NormalizationArg) (int32, string, string) {
 	var possibleLimitingReason, possibleLimitingMessage string
-
 	if args.DesiredReplicas > args.CurrentReplicas {
+		a.scaleUpEventsLock.Lock()
+		defer a.scaleUpEventsLock.Unlock()
+
 		scaleUpLimit := calculateScaleUpLimitWithScalingRules(args.CurrentReplicas,
 			a.scaleUpEvents[args.Key], args.ScaleUpBehavior)
 		if scaleUpLimit < args.CurrentReplicas {
@@ -1125,6 +1153,9 @@ func (a *GeneralController) convertDesiredReplicasWithBehaviorRate(args Normaliz
 			return maximumAllowedReplicas, possibleLimitingReason, possibleLimitingMessage
 		}
 	} else if args.DesiredReplicas < args.CurrentReplicas {
+		a.scaleDownEventsLock.Lock()
+		defer a.scaleDownEventsLock.Unlock()
+
 		scaleDownLimit := calculateScaleDownLimitWithBehaviors(args.CurrentReplicas,
 			a.scaleDownEvents[args.Key], args.ScaleDownBehavior)
 		if scaleDownLimit > args.CurrentReplicas {
