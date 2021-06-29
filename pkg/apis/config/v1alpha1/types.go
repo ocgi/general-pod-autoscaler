@@ -51,6 +51,6 @@ type GPAControllerConfiguration struct {
 	// period.
 	GeneralPodAutoscalerInitialReadinessDelay metav1.Duration
 	// GeneralPodAutoscalerWorkers is the goroutine number of GPA controller to parallel process worker
-	// default value is 4
+	// default value is 1
 	GeneralPodAutoscalerWorkers int
 }
