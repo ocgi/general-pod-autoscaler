@@ -117,6 +117,10 @@ func main() {
 		external_metrics.NewForConfigOrDie(kubeconfig),
 	)
 
+	workers := 1
+	if runConfig.GeneralPodAutoscalerWorkers > 0 {
+		workers = runConfig.GeneralPodAutoscalerWorkers
+	}
 	controller := scaler.NewGeneralController(
 		client.CoreV1(),
 		scaleClient,
@@ -130,6 +134,7 @@ func main() {
 		runConfig.GeneralPodAutoscalerTolerance,
 		runConfig.GeneralPodAutoscalerCPUInitializationPeriod.Duration,
 		runConfig.GeneralPodAutoscalerInitialReadinessDelay.Duration,
+		workers,
 	)
 	coreFactory.Start(stop)
 	scalerFactory.Start(stop)

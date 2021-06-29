@@ -30,6 +30,7 @@ package scaler
 
 import (
 	"fmt"
+	"k8s.io/klog"
 	"math"
 	"time"
 
@@ -142,7 +143,8 @@ func (c *ReplicaCalculator) GetResourceReplicas(currentReplicas int32, targetUti
 			metrics[podName] = metricsclient.PodMetric{Value: 0}
 		}
 	}
-
+	klog.V(4).Infof("GetResourceUtilizationRatio selector=%v, container=%v, resourceName=%v, resource=%v, "+
+		"targetUtilization=%v, usageRatio=%v, utilization=%v, rawUtilization=%v, rebalanceIgnored=%v", selector, container, resource, requests, targetUtilization, usageRatio, utilization, rawUtilization, rebalanceIgnored)
 	// re-run the utilization calculation with our new numbers
 	newUsageRatio, _, _, err := metricsclient.GetResourceUtilizationRatio(metrics, requests, targetUtilization)
 	if err != nil {

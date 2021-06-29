@@ -73,6 +73,7 @@ func (o *RunOptions) addGPAFlags() {
 	pflag.BoolVar(&o.GeneralPodAutoscalerUseRESTClients, "general-pod-autoscaler-use-rest-clients", o.GeneralPodAutoscalerUseRESTClients, "If set to true, causes the general pod autoscaler controller to use REST clients through the kube-aggregator, instead of using the legacy metrics client through the API server proxy.  This is required for custom metrics support in the general pod autoscaler.")
 	pflag.DurationVar(&o.GeneralPodAutoscalerCPUInitializationPeriod.Duration, "general-pod-autoscaler-cpu-initialization-period", o.GeneralPodAutoscalerCPUInitializationPeriod.Duration, "The period after pod start when CPU samples might be skipped.")
 	pflag.DurationVar(&o.GeneralPodAutoscalerInitialReadinessDelay.Duration, "general-pod-autoscaler-initial-readiness-delay", o.GeneralPodAutoscalerInitialReadinessDelay.Duration, "The period after pod start during which readiness changes will be treated as initial readiness.")
+	pflag.IntVar(&o.GeneralPodAutoscalerWorkers, "general-pod-autoscaler-workers", o.GeneralPodAutoscalerWorkers, "The number for parallel process worker.")
 }
 
 func (s *RunOptions) NewConfig() (*rest.Config, error) {

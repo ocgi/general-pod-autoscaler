@@ -105,6 +105,8 @@ type GeneralController struct {
 	scaleDownEvents map[string][]timestampedScaleEvent
 
 	doingCron sync.Map
+
+	workers int
 }
 
 // NewGeneralController creates a new GeneralController.
@@ -121,7 +123,7 @@ func NewGeneralController(
 	tolerance float64,
 	cpuInitializationPeriod,
 	delayOfInitialReadinessStatus time.Duration,
-
+	workers int,
 ) *GeneralController {
 	s := scheme.Scheme
 	s.AddKnownTypes(autoscaling.SchemeGroupVersion, &autoscaling.GeneralPodAutoscaler{})
@@ -141,6 +143,7 @@ func NewGeneralController(
 		recommendations: map[string][]timestampedRecommendation{},
 		scaleUpEvents:   map[string][]timestampedScaleEvent{},
 		scaleDownEvents: map[string][]timestampedScaleEvent{},
+		workers:         workers,
 	}
 
 	gpaInformer.Informer().AddEventHandlerWithResyncPeriod(
@@ -174,15 +177,17 @@ func (a *GeneralController) Run(stopCh <-chan struct{}) {
 	defer utilruntime.HandleCrash()
 	defer a.queue.ShutDown()
 
-	klog.Infof("Starting GPA controller")
+	klog.Infof("Starting GPA controller, workers is %v", a.workers)
 	defer klog.Infof("Shutting down GPA controller")
 
 	if !cache.WaitForNamedCacheSync("GPA", stopCh, a.gpaListerSynced, a.podListerSynced) {
 		return
 	}
+	// start some workers
+	for i := 0; i < a.workers; i++ {
+		go wait.Until(a.worker, time.Second, stopCh)
+	}
 
-	// start a single worker (we may wish to start more in the future)
-	go wait.Until(a.worker, time.Second, stopCh)
 	<-stopCh
 }
 
@@ -221,6 +226,38 @@ func (a *GeneralController) worker() {
 	}
 	klog.Infof("general pod autoscaler controller worker shutting down")
 }
+
+/*
+func (a *GeneralController) processParallelWorkItem(goroutineNums int) {
+	ch := make(chan int, goroutineNums)
+	klog.Infof("general pod autoscaler controller processParallelWorkItem  goroutineNums=%v", goroutineNums)
+	var (
+		key  interface{}
+		quit bool
+	)
+	for !quit {
+		key, quit = a.queue.Get()
+		if quit {
+			return
+		}
+		ch <- 1
+		go func(_key interface{}, c chan int) {
+			defer func() {
+				a.queue.Done(_key)
+				<-ch
+			}()
+
+			deleted, err := a.reconcileKey(_key.(string))
+			if err != nil {
+				utilruntime.HandleError(err)
+			}
+			if !deleted {
+				a.queue.AddRateLimited(_key)
+			}
+			klog.Infof("general pod autoscaler controller parallel worker process key:%v", _key)
+		}(key, ch)
+	}
+}*/
 
 func (a *GeneralController) processNextWorkItem() bool {
 	key, quit := a.queue.Get()

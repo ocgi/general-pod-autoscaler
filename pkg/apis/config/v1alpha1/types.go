@@ -50,4 +50,7 @@ type GPAControllerConfiguration struct {
 	// GPA will disregard CPU samples from unready pods that had last readiness change during that
 	// period.
 	GeneralPodAutoscalerInitialReadinessDelay metav1.Duration
+	// GeneralPodAutoscalerWorkers is the goroutine number of GPA controller to parallel process worker
+	// default value is 4
+	GeneralPodAutoscalerWorkers int
 }
