@@ -100,6 +100,9 @@ type GeneralController struct {
 	// Latest unstabilized recommendations for each autoscaler.
 	recommendations map[string][]timestampedRecommendation
 
+	// Multi goroutine read and write recommendations may unsafe.
+	recommendationsLock sync.RWMutex
+
 	// Latest autoscaler events
 	scaleUpEvents   map[string][]timestampedScaleEvent
 	scaleDownEvents map[string][]timestampedScaleEvent
@@ -677,6 +680,10 @@ func (a *GeneralController) computeStatusForExternalMetric(specReplicas, statusR
 }
 
 func (a *GeneralController) recordInitialRecommendation(currentReplicas int32, key string) {
+	//add lock
+	a.recommendationsLock.Lock()
+	defer a.recommendationsLock.Unlock()
+
 	if a.recommendations[key] == nil {
 		a.recommendations[key] = []timestampedRecommendation{{currentReplicas, time.Now()}}
 	}
@@ -888,6 +895,10 @@ func (a *GeneralController) updateLabelsIfNeeded(gpa *autoscaling.GeneralPodAuto
 // - replaces old recommendation with the newest recommendation,
 // - returns max of recommendations that are not older than downscaleStabilisationWindow.
 func (a *GeneralController) stabilizeRecommendation(key string, prenormalizedDesiredReplicas int32) int32 {
+	//add lock
+	a.recommendationsLock.Lock()
+	defer a.recommendationsLock.Unlock()
+
 	maxRecommendation := prenormalizedDesiredReplicas
 	foundOldSample := false
 	oldSampleIndex := 0
