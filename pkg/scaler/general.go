@@ -227,38 +227,6 @@ func (a *GeneralController) worker() {
 	klog.Infof("general pod autoscaler controller worker shutting down")
 }
 
-/*
-func (a *GeneralController) processParallelWorkItem(goroutineNums int) {
-	ch := make(chan int, goroutineNums)
-	klog.Infof("general pod autoscaler controller processParallelWorkItem  goroutineNums=%v", goroutineNums)
-	var (
-		key  interface{}
-		quit bool
-	)
-	for !quit {
-		key, quit = a.queue.Get()
-		if quit {
-			return
-		}
-		ch <- 1
-		go func(_key interface{}, c chan int) {
-			defer func() {
-				a.queue.Done(_key)
-				<-ch
-			}()
-
-			deleted, err := a.reconcileKey(_key.(string))
-			if err != nil {
-				utilruntime.HandleError(err)
-			}
-			if !deleted {
-				a.queue.AddRateLimited(_key)
-			}
-			klog.Infof("general pod autoscaler controller parallel worker process key:%v", _key)
-		}(key, ch)
-	}
-}*/
-
 func (a *GeneralController) processNextWorkItem() bool {
 	key, quit := a.queue.Get()
 	if quit {
