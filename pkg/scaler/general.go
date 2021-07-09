@@ -107,6 +107,10 @@ type GeneralController struct {
 	scaleUpEvents   map[string][]timestampedScaleEvent
 	scaleDownEvents map[string][]timestampedScaleEvent
 
+	// Multi goroutine read and write events may unsafe.
+	scaleUpEventsLock   sync.RWMutex
+	scaleDownEventsLock sync.RWMutex
+
 	doingCron sync.Map
 
 	workers int
@@ -1030,6 +1034,12 @@ func (a *GeneralController) getUnableComputeReplicaCountCondition(gpa *autoscali
 // outdated events to be replaced were marked as outdated in the `markScaleEventsOutdated` function
 func (a *GeneralController) storeScaleEvent(behavior *autoscaling.GeneralPodAutoscalerBehavior,
 	key string, prevReplicas, newReplicas int32) {
+	//add lock
+	a.scaleUpEventsLock.Lock()
+	defer a.scaleUpEventsLock.Unlock()
+	a.scaleDownEventsLock.Lock()
+	defer a.scaleDownEventsLock.Unlock()
+
 	if behavior == nil {
 		return // we should not store any event as they will not be used
 	}
@@ -1120,6 +1130,11 @@ func (a *GeneralController) stabilizeRecommendationWithBehaviors(args Normalizat
 // It doesn't consider the stabilizationWindow, it is done separately
 func (a *GeneralController) convertDesiredReplicasWithBehaviorRate(args NormalizationArg) (int32, string, string) {
 	var possibleLimitingReason, possibleLimitingMessage string
+	//add lock
+	a.scaleUpEventsLock.Lock()
+	defer a.scaleUpEventsLock.Unlock()
+	a.scaleDownEventsLock.Lock()
+	defer a.scaleDownEventsLock.Unlock()
 
 	if args.DesiredReplicas > args.CurrentReplicas {
 		scaleUpLimit := calculateScaleUpLimitWithScalingRules(args.CurrentReplicas,
