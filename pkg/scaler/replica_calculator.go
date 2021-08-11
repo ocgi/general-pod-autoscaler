@@ -29,7 +29,9 @@
 package scaler
 
 import (
+	"encoding/json"
 	"fmt"
+	"k8s.io/klog"
 	"math"
 	"time"
 
@@ -111,7 +113,17 @@ func (c *ReplicaCalculator) GetResourceReplicas(currentReplicas int32, targetUti
 	if err != nil {
 		return 0, 0, 0, time.Time{}, err
 	}
+
 	rebalanceIgnored := len(unreadyPods) > 0 && usageRatio > 1.0
+	metricsInfo, err := json.Marshal(metrics)
+	if err != nil {
+		klog.V(4).Infof("GetResourceUtilizationRatio selector=%v, container=%v, resourceName=%v, resource=%v, "+
+			"targetUtilization=%v, usageRatio=%v, utilization=%v, rawUtilization=%v, podMetrics=%v, rebalanceIgnored=%v", selector, container, resource, requests, targetUtilization, usageRatio, utilization, rawUtilization, metrics, rebalanceIgnored)
+	} else {
+		klog.V(4).Infof("GetResourceUtilizationRatio selector=%v, container=%v, resourceName=%v, resource=%v, "+
+			"targetUtilization=%v, usageRatio=%v, utilization=%v, rawUtilization=%v, podMetrics=%v, rebalanceIgnored=%v", selector, container, resource, requests, targetUtilization, usageRatio, utilization, rawUtilization, string(metricsInfo), rebalanceIgnored)
+	}
+
 	if !rebalanceIgnored && len(missingPods) == 0 {
 		if math.Abs(1.0-usageRatio) <= c.tolerance {
 			// return the current replicas if the change would be too small
@@ -145,6 +157,7 @@ func (c *ReplicaCalculator) GetResourceReplicas(currentReplicas int32, targetUti
 	// re-run the utilization calculation with our new numbers
 	newUsageRatio, _, _, err := metricsclient.GetResourceUtilizationRatio(metrics, requests, targetUtilization)
 	if err != nil {
+		klog.Errorf("GetResourceUtilizationRatio error:%v", err)
 		return 0, utilization, rawUtilization, time.Time{}, err
 	}
 
