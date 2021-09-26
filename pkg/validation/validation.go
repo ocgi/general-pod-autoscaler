@@ -17,6 +17,7 @@ package validation
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/robfig/cron"
 	"k8s.io/api/admissionregistration/v1beta1"
@@ -26,6 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"k8s.io/apiserver/pkg/util/webhook"
 
+	mapset "github.com/deckarep/golang-set"
 	autoscaling "github.com/ocgi/general-pod-autoscaler/pkg/apis/autoscaling/v1alpha1"
 )
 
@@ -59,6 +61,11 @@ func validateHorizontalPodAutoscalerSpec(autoscaler autoscaling.GeneralPodAutosc
 	}
 	if autoscaler.AutoScalingDrivenMode.MetricMode != nil {
 		if refErrs := validateMetrics(autoscaler.AutoScalingDrivenMode.MetricMode.Metrics, fldPath.Child("metrics"), autoscaler.MinReplicas); len(refErrs) > 0 {
+			allErrs = append(allErrs, refErrs...)
+		}
+	}
+	if autoscaler.AutoScalingDrivenMode.CronMetricMode != nil {
+		if refErrs := validateCronMetric(autoscaler.AutoScalingDrivenMode.CronMetricMode, fldPath.Child("cronMetric"), minReplicasLowerBound); len(refErrs) > 0 {
 			allErrs = append(allErrs, refErrs...)
 		}
 	}
@@ -142,6 +149,59 @@ func ValidateHorizontalPodAutoscalerStatusUpdate(newAutoscaler, oldAutoscaler *a
 	return allErrs
 }
 
+func validateCronMetric(cronMetricMode *autoscaling.CronMetricMode, fldPath *field.Path, minReplicasLowerBound int32) field.ErrorList {
+	allErrs := field.ErrorList{}
+	if len(cronMetricMode.CronMetrics) == 0 {
+		allErrs = append(allErrs, field.Forbidden(fldPath.Child("cronMetrics"), "at least one cronMetrics should set"))
+	}
+	if cronMetricMode.DefaultReplicas < 1 {
+		allErrs = append(allErrs, field.Invalid(fldPath.Child("defaultReplicas"), cronMetricMode.DefaultReplicas, "must be greater than 0"))
+	}
+	start := time.Now()
+	setSlice := make([]mapset.Set, 0)
+	for _, cronRange := range cronMetricMode.CronMetrics {
+		if cronRange.MinReplicas != nil && *cronRange.MinReplicas < minReplicasLowerBound {
+			allErrs = append(allErrs, field.Invalid(fldPath.Child("minReplicas"), *cronRange.MinReplicas,
+				fmt.Sprintf("must be greater than or equal to %d", minReplicasLowerBound)))
+		}
+		if cronRange.MaxReplicas < 1 {
+			allErrs = append(allErrs, field.Invalid(fldPath.Child("maxReplicas"), cronRange.MaxReplicas, "must be greater than 0"))
+		}
+		if cronRange.MinReplicas != nil && cronRange.MaxReplicas < *cronRange.MinReplicas {
+			allErrs = append(allErrs, field.Invalid(fldPath.Child("maxReplicas"), cronRange.MaxReplicas, "must be greater than or equal to `minReplicas`"))
+		}
+		if len(cronRange.Schedule) == 0 {
+			allErrs = append(allErrs, field.Forbidden(fldPath.Child("schedule"), "should not empty"))
+		} else {
+			sch, err := cron.ParseStandard(cronRange.Schedule)
+			if err != nil {
+				allErrs = append(allErrs, field.Forbidden(fldPath.Child("schedule"), err.Error()))
+				continue
+			}
+			schSet := mapset.NewSet()
+			for {
+				next := sch.Next(start)
+				schSet.Add(next)
+				if next.Month() != start.Month() {
+					break
+				}
+			}
+			setSlice = append(setSlice, schSet)
+		}
+	}
+	for i := 0; i <= len(setSlice); i++ {
+		for j := i + 1; j <= len(setSlice); j++ {
+			IntersectSet := setSlice[i].Intersect(setSlice[j])
+			if IntersectSet.Cardinality() > 0 {
+				allErrs = append(allErrs, field.Forbidden(fldPath.Child("schedule"), fmt.Sprintf("schedule time conflict,one conflict time content: %s",
+					IntersectSet.ToSlice()[0].(time.Time).Format("2006/1/2 15:04:05"))))
+				break
+			}
+		}
+	}
+	return allErrs
+}
+
 func validateMetrics(metrics []autoscaling.MetricSpec, fldPath *field.Path, minReplicas *int32) field.ErrorList {
 	allErrs := field.ErrorList{}
 	hasObjectMetrics := false
@@ -173,6 +233,7 @@ func validateWebhook(wc *v1beta1.WebhookClientConfig, fldPath *field.Path) field
 	allErrs := field.ErrorList{}
 	if wc == nil {
 		allErrs = append(allErrs, field.Forbidden(fldPath, "webhook config should not be empty"))
+		return allErrs
 	}
 	switch {
 	case wc.Service == nil && wc.URL == nil:
