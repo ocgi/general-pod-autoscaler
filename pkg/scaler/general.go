@@ -982,7 +982,7 @@ func (a *GeneralController) reconcileAutoscaler(gpa *autoscaling.GeneralPodAutos
 		setCondition(gpa, autoscaling.AbleToScale, v1.ConditionTrue,
 			"SucceededRescale", "the GPA controller was able to update the target scale to %d", desiredReplicas)
 		a.eventRecorder.Eventf(gpa, v1.EventTypeNormal, "SuccessfulRescale",
-			"old size: %d; new size: %d; min size: %d; max size: %d; reason: %s", currentReplicas, desiredReplicas, *gpa.Spec.MinReplicas, gpa.Spec.MaxReplicas, rescaleReason)
+			"old size: %d; new size: %d; min size: %d; max size: %d; reason: %s", currentReplicas, desiredReplicas, minReplicas, gpa.Spec.MaxReplicas, rescaleReason)
 		a.storeScaleEvent(gpa.Spec.Behavior, key, currentReplicas, desiredReplicas)
 		klog.Infof("Successful rescale of %s, old size: %d, new size: %d, reason: %s",
 			gpa.Name, currentReplicas, desiredReplicas, rescaleReason)
