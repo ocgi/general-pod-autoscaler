@@ -895,7 +895,7 @@ func (a *GeneralController) reconcileAutoscaler(gpa *autoscaling.GeneralPodAutos
 			gpa.Spec.MinReplicas = &min
 			gpa.Spec.MaxReplicas = max
 		} else {
-			*gpa.Spec.MinReplicas = gpa.Spec.CronMetricMode.DefaultReplicas
+			gpa.Spec.MinReplicas = &gpa.Spec.CronMetricMode.DefaultReplicas
 			gpa.Spec.MaxReplicas = gpa.Spec.CronMetricMode.DefaultReplicas
 		}
 	}
