@@ -324,7 +324,7 @@ func (a *GeneralController) computeReplicasForMetrics(gpa *autoscaling.GeneralPo
 // returning the maximum  of the computed replica counts, a description of the associated metric, and the statuses of
 // all metrics computed.
 func (a *GeneralController) computeReplicasForCronMetrics(gpa *autoscaling.GeneralPodAutoscaler, scale *autoscalinginternal.Scale,
-	metricSpecs []autoscaling.CronMetricSpec) (replicas int32, metric string, statuses []autoscaling.MetricStatus, timestamp time.Time, err error) {
+	metricSpecs []autoscaling.CronMetricSpec, need bool) (replicas int32, metric string, statuses []autoscaling.MetricStatus, timestamp time.Time, err error) {
 	if scale.Status.Selector == "" {
 		errMsg := "selector is required"
 		a.eventRecorder.Event(gpa, v1.EventTypeWarning, "SelectorRequired", errMsg)
@@ -350,7 +350,7 @@ func (a *GeneralController) computeReplicasForCronMetrics(gpa *autoscaling.Gener
 
 	for i, metricSpec := range metricSpecs {
 		replicaCountProposal, metricNameProposal, timestampProposal, condition, err := a.computeReplicasForCronMetric(gpa,
-			metricSpec, specReplicas, statusReplicas, selector, &statuses[i])
+			metricSpec, specReplicas, statusReplicas, selector, &statuses[i], need)
 		if err != nil {
 			if invalidMetricsCount <= 0 {
 				invalidMetricCondition = condition
@@ -522,61 +522,62 @@ func (a *GeneralController) computeReplicasForMetric(gpa *autoscaling.GeneralPod
 // Computes the desired number of replicas for a specific gpa and metric specification,
 // returning the metric status and a proposed condition to be set on the GPA object.
 func (a *GeneralController) computeReplicasForCronMetric(gpa *autoscaling.GeneralPodAutoscaler, spec autoscaling.CronMetricSpec,
-	specReplicas, statusReplicas int32, selector labels.Selector, status *autoscaling.MetricStatus) (replicaCountProposal int32, metricNameProposal string,
+	specReplicas, statusReplicas int32, selector labels.Selector, status *autoscaling.MetricStatus, need bool) (replicaCountProposal int32, metricNameProposal string,
 	timestampProposal time.Time, condition autoscaling.GeneralPodAutoscalerCondition, err error) {
-	scale := scalercore.NewCronMetricsScaler(gpa.Spec.CronMetricMode.CronMetrics)
-	max, min, sure := scale.GetCurrentMaxAndMinReplicas(gpa)
-	switch spec.Type {
-	case autoscaling.ObjectMetricSourceType:
-		metricSelector, err := metav1.LabelSelectorAsSelector(spec.Object.Metric.Selector)
-		if err != nil {
-			condition := a.getUnableComputeReplicaCountCondition(gpa, "FailedGetObjectMetric", err)
-			return 0, "", time.Time{}, condition, fmt.Errorf("failed to get object metric value: %v", err)
-		}
-		replicaCountProposal, timestampProposal, metricNameProposal, condition, err = a.computeStatusForObjectMetric(specReplicas, statusReplicas, spec.MetricSpec, gpa, selector, status, metricSelector)
-		if err != nil {
-			return 0, "", time.Time{}, condition, fmt.Errorf("failed to get object metric value: %v", err)
-		}
-	case autoscaling.PodsMetricSourceType:
-		metricSelector, err := metav1.LabelSelectorAsSelector(spec.Pods.Metric.Selector)
-		if err != nil {
-			condition := a.getUnableComputeReplicaCountCondition(gpa, "FailedGetPodsMetric", err)
-			return 0, "", time.Time{}, condition, fmt.Errorf("failed to get pods metric value: %v", err)
-		}
-		replicaCountProposal, timestampProposal, metricNameProposal, condition, err = a.computeStatusForPodsMetric(specReplicas, spec.MetricSpec, gpa, selector, status, metricSelector)
-		if err != nil {
-			return 0, "", time.Time{}, condition, fmt.Errorf("failed to get pods metric value: %v", err)
-		}
-	case autoscaling.ResourceMetricSourceType:
-		replicaCountProposal, timestampProposal, metricNameProposal, condition, err = a.computeStatusForResourceMetric(specReplicas, spec.MetricSpec, gpa, selector, status)
-		if err != nil {
-			return 0, "", time.Time{}, condition, err
-		}
-	case autoscaling.ContainerResourceMetricSourceType:
-		replicaCountProposal, timestampProposal, metricNameProposal, condition, err = a.computeStatusForContainerResourceMetric(specReplicas, spec.MetricSpec, gpa, selector, status)
-		if err != nil {
-			return 0, "", time.Time{}, condition, err
-		}
-	case autoscaling.ExternalMetricSourceType:
-		replicaCountProposal, timestampProposal, metricNameProposal, condition, err = a.computeStatusForExternalMetric(specReplicas, statusReplicas, spec.MetricSpec, gpa, selector, status)
-		if err != nil {
-			return 0, "", time.Time{}, condition, err
-		}
-	default:
-		errMsg := fmt.Sprintf("unknown metric source type %q", string(spec.Type))
-		err = fmt.Errorf(errMsg)
-		condition := a.getUnableComputeReplicaCountCondition(gpa, "InvalidMetricSourceType", err)
-		return 0, "", time.Time{}, condition, err
-	}
+	//scale := scalercore.NewCronMetricsScaler(gpa.Spec.CronMetricMode.CronMetrics)
+	//max, min, sure := scale.GetCurrentMaxAndMinReplicas(gpa)
+	replicaCountProposal, metricNameProposal, timestampProposal, condition, err = a.computeReplicasForMetric(gpa, spec.MetricSpec, specReplicas, statusReplicas, selector, status)
+	//switch spec.Type {
+	//case autoscaling.ObjectMetricSourceType:
+	//	metricSelector, err := metav1.LabelSelectorAsSelector(spec.Object.Metric.Selector)
+	//	if err != nil {
+	//		condition := a.getUnableComputeReplicaCountCondition(gpa, "FailedGetObjectMetric", err)
+	//		return 0, "", time.Time{}, condition, fmt.Errorf("failed to get object metric value: %v", err)
+	//	}
+	//	replicaCountProposal, timestampProposal, metricNameProposal, condition, err = a.computeStatusForObjectMetric(specReplicas, statusReplicas, spec.MetricSpec, gpa, selector, status, metricSelector)
+	//	if err != nil {
+	//		return 0, "", time.Time{}, condition, fmt.Errorf("failed to get object metric value: %v", err)
+	//	}
+	//case autoscaling.PodsMetricSourceType:
+	//	metricSelector, err := metav1.LabelSelectorAsSelector(spec.Pods.Metric.Selector)
+	//	if err != nil {
+	//		condition := a.getUnableComputeReplicaCountCondition(gpa, "FailedGetPodsMetric", err)
+	//		return 0, "", time.Time{}, condition, fmt.Errorf("failed to get pods metric value: %v", err)
+	//	}
+	//	replicaCountProposal, timestampProposal, metricNameProposal, condition, err = a.computeStatusForPodsMetric(specReplicas, spec.MetricSpec, gpa, selector, status, metricSelector)
+	//	if err != nil {
+	//		return 0, "", time.Time{}, condition, fmt.Errorf("failed to get pods metric value: %v", err)
+	//	}
+	//case autoscaling.ResourceMetricSourceType:
+	//	replicaCountProposal, timestampProposal, metricNameProposal, condition, err = a.computeStatusForResourceMetric(specReplicas, spec.MetricSpec, gpa, selector, status)
+	//	if err != nil {
+	//		return 0, "", time.Time{}, condition, err
+	//	}
+	//case autoscaling.ContainerResourceMetricSourceType:
+	//	replicaCountProposal, timestampProposal, metricNameProposal, condition, err = a.computeStatusForContainerResourceMetric(specReplicas, spec.MetricSpec, gpa, selector, status)
+	//	if err != nil {
+	//		return 0, "", time.Time{}, condition, err
+	//	}
+	//case autoscaling.ExternalMetricSourceType:
+	//	replicaCountProposal, timestampProposal, metricNameProposal, condition, err = a.computeStatusForExternalMetric(specReplicas, statusReplicas, spec.MetricSpec, gpa, selector, status)
+	//	if err != nil {
+	//		return 0, "", time.Time{}, condition, err
+	//	}
+	//default:
+	//	errMsg := fmt.Sprintf("unknown metric source type %q", string(spec.Type))
+	//	err = fmt.Errorf(errMsg)
+	//	condition := a.getUnableComputeReplicaCountCondition(gpa, "InvalidMetricSourceType", err)
+	//	return 0, "", time.Time{}, condition, err
+	//}
 	//not in cron time period
 	//use defaultReplicas
-	if !sure {
+	if !need {
 		replicaCountProposal = gpa.Spec.CronMetricMode.DefaultReplicas
-		gpa.Spec.MaxReplicas = replicaCountProposal
-		gpa.Spec.MinReplicas = &replicaCountProposal
+		//gpa.Spec.MaxReplicas = replicaCountProposal
+		//gpa.Spec.MinReplicas = &replicaCountProposal
 	} else {
-		gpa.Spec.MaxReplicas = max
-		gpa.Spec.MinReplicas = &min
+		max := gpa.Spec.MaxReplicas
+		min := *gpa.Spec.MinReplicas
 		if replicaCountProposal < min {
 			replicaCountProposal = min
 		}
@@ -584,7 +585,8 @@ func (a *GeneralController) computeReplicasForCronMetric(gpa *autoscaling.Genera
 			replicaCountProposal = max
 		}
 	}
-	return replicaCountProposal, metricNameProposal, timestampProposal, autoscaling.GeneralPodAutoscalerCondition{}, nil
+	return replicaCountProposal, metricNameProposal, timestampProposal, condition, err
+	//return replicaCountProposal, metricNameProposal, timestampProposal, autoscaling.GeneralPodAutoscalerCondition{}, nil
 }
 
 func (a *GeneralController) reconcileKey(key string) (deleted bool, err error) {
@@ -888,10 +890,12 @@ func (a *GeneralController) reconcileAutoscaler(gpa *autoscaling.GeneralPodAutos
 	rescaleReason := ""
 
 	var minReplicas int32
+	var max, min int32
+	var need bool
 	if gpa.Spec.CronMetricMode != nil {
 		cronMetricsScale := scalercore.NewCronMetricsScaler(gpa.Spec.CronMetricMode.CronMetrics)
-		max, min, sure := cronMetricsScale.GetCurrentMaxAndMinReplicas(gpa)
-		if sure {
+		max, min, need = cronMetricsScale.GetCurrentMaxAndMinReplicas(gpa)
+		if need {
 			gpa.Spec.MinReplicas = &min
 			gpa.Spec.MaxReplicas = max
 		} else {
@@ -906,7 +910,6 @@ func (a *GeneralController) reconcileAutoscaler(gpa *autoscaling.GeneralPodAutos
 		minReplicas = 1
 	}
 
-	cronMode := false
 	rescale := true
 	if scale.Spec.Replicas == 0 && minReplicas != 0 {
 		// Autoscaling is disabled for this resource
@@ -930,9 +933,8 @@ func (a *GeneralController) reconcileAutoscaler(gpa *autoscaling.GeneralPodAutos
 			metricDesiredReplicas, metricName, metricStatuses, metricTimestamp, err = a.computeReplicasForMetrics(gpa,
 				scale, gpa.Spec.MetricMode.Metrics)
 		case gpa.Spec.CronMetricMode != nil:
-			cronMode = true
 			metricDesiredReplicas, metricName, metricStatuses, metricTimestamp, err = a.computeReplicasForCronMetrics(gpa,
-				scale, gpa.Spec.CronMetricMode.CronMetrics)
+				scale, gpa.Spec.CronMetricMode.CronMetrics, need)
 		default:
 			metricDesiredReplicas, metricName, metricStatuses, metricTimestamp, err = a.computeReplicasForSimple(gpa,
 				scale)
@@ -947,8 +949,7 @@ func (a *GeneralController) reconcileAutoscaler(gpa *autoscaling.GeneralPodAutos
 			return fmt.Errorf("failed to compute desired number of replicas based on listed metrics for %s: %v", reference, err)
 		}
 		//Record event when the metricDesiredReplicas is greater than gpa.Spec.MaxReplicas
-		//cronMode has Independence minReplicas and maxReplicas
-		if metricDesiredReplicas > gpa.Spec.MaxReplicas && !cronMode {
+		if metricDesiredReplicas > gpa.Spec.MaxReplicas {
 			a.eventRecorder.Eventf(gpa, v1.EventTypeWarning, "FailedRescale", "DesiredReplicas:%v cannot exceed the MaxReplicas: %v", metricDesiredReplicas, gpa.Spec.MaxReplicas)
 		}
 		klog.V(4).Infof("proposing %v desired replicas (based on %s from %s) for %s",
@@ -991,7 +992,7 @@ func (a *GeneralController) reconcileAutoscaler(gpa *autoscaling.GeneralPodAutos
 		setCondition(gpa, autoscaling.AbleToScale, v1.ConditionTrue,
 			"SucceededRescale", "the GPA controller was able to update the target scale to %d", desiredReplicas)
 		a.eventRecorder.Eventf(gpa, v1.EventTypeNormal, "SuccessfulRescale",
-			"old size: %d; new size: %d; min size: %d; max size: %d; reason: %s", currentReplicas, desiredReplicas, minReplicas, gpa.Spec.MaxReplicas, rescaleReason)
+			"old size: %d; new size: %d; min size: %d; max size: %d; reason: %s", currentReplicas, desiredReplicas, *gpa.Spec.MinReplicas, gpa.Spec.MaxReplicas, rescaleReason)
 		a.storeScaleEvent(gpa.Spec.Behavior, key, currentReplicas, desiredReplicas)
 		klog.Infof("Successful rescale of %s, old size: %d, new size: %d, reason: %s",
 			gpa.Name, currentReplicas, desiredReplicas, rescaleReason)
