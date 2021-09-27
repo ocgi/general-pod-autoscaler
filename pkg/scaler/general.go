@@ -526,7 +526,6 @@ func (a *GeneralController) computeReplicasForCronMetric(gpa *autoscaling.Genera
 	timestampProposal time.Time, condition autoscaling.GeneralPodAutoscalerCondition, err error) {
 	scale := scalercore.NewCronMetricsScaler(gpa.Spec.CronMetricMode.CronMetrics)
 	max, min, sure := scale.GetCurrentMaxAndMinReplicas(gpa)
-
 	switch spec.Type {
 	case autoscaling.ObjectMetricSourceType:
 		metricSelector, err := metav1.LabelSelectorAsSelector(spec.Object.Metric.Selector)
@@ -889,7 +888,17 @@ func (a *GeneralController) reconcileAutoscaler(gpa *autoscaling.GeneralPodAutos
 	rescaleReason := ""
 
 	var minReplicas int32
-
+	if gpa.Spec.CronMetricMode != nil {
+		cronMetricsScale := scalercore.NewCronMetricsScaler(gpa.Spec.CronMetricMode.CronMetrics)
+		max, min, sure := cronMetricsScale.GetCurrentMaxAndMinReplicas(gpa)
+		if sure {
+			*gpa.Spec.MinReplicas = min
+			gpa.Spec.MaxReplicas = max
+		} else {
+			*gpa.Spec.MinReplicas = gpa.Spec.CronMetricMode.DefaultReplicas
+			gpa.Spec.MaxReplicas = gpa.Spec.CronMetricMode.DefaultReplicas
+		}
+	}
 	if gpa.Spec.MinReplicas != nil {
 		minReplicas = *gpa.Spec.MinReplicas
 	} else {
