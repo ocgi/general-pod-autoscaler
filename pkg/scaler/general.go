@@ -892,7 +892,7 @@ func (a *GeneralController) reconcileAutoscaler(gpa *autoscaling.GeneralPodAutos
 		cronMetricsScale := scalercore.NewCronMetricsScaler(gpa.Spec.CronMetricMode.CronMetrics)
 		max, min, sure := cronMetricsScale.GetCurrentMaxAndMinReplicas(gpa)
 		if sure {
-			*gpa.Spec.MinReplicas = min
+			gpa.Spec.MinReplicas = &min
 			gpa.Spec.MaxReplicas = max
 		} else {
 			*gpa.Spec.MinReplicas = gpa.Spec.CronMetricMode.DefaultReplicas
