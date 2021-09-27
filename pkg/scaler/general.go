@@ -1623,7 +1623,7 @@ func min(a, b int32) int32 {
 }
 
 func isEmpty(a autoscaling.AutoScalingDrivenMode) bool {
-	return a.MetricMode == nil && a.EventMode == nil && a.TimeMode == nil && a.WebhookMode == nil
+	return a.MetricMode == nil && a.EventMode == nil && a.TimeMode == nil && a.WebhookMode == nil && a.CronMetricMode == nil
 }
 
 func isComputeByLimits(gpa *autoscaling.GeneralPodAutoscaler) bool {
