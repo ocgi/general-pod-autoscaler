@@ -911,18 +911,22 @@ func (a *GeneralController) reconcileAutoscaler(gpa *autoscaling.GeneralPodAutos
 	}
 
 	rescale := true
+	klog.Infof("run 1")
 	if scale.Spec.Replicas == 0 && minReplicas != 0 {
 		// Autoscaling is disabled for this resource
 		desiredReplicas = 0
 		rescale = false
 		setCondition(gpa, autoscaling.ScalingActive, v1.ConditionFalse, "ScalingDisabled",
 			"scaling is disabled since the replica count of the target is zero")
+		klog.Infof("run 2")
 	} else if currentReplicas > gpa.Spec.MaxReplicas {
 		rescaleReason = "Current number of replicas above Spec.MaxReplicas"
 		desiredReplicas = gpa.Spec.MaxReplicas
+		klog.Infof("run 3")
 	} else if currentReplicas < minReplicas {
 		rescaleReason = "Current number of replicas below Spec.MinReplicas"
 		desiredReplicas = minReplicas
+		klog.Infof("run 4")
 	} else {
 		var metricTimestamp time.Time
 		if isEmpty(gpa.Spec.AutoScalingDrivenMode) {
@@ -939,8 +943,9 @@ func (a *GeneralController) reconcileAutoscaler(gpa *autoscaling.GeneralPodAutos
 			metricDesiredReplicas, metricName, metricStatuses, metricTimestamp, err = a.computeReplicasForSimple(gpa,
 				scale)
 		}
-
+		klog.Infof("run 5")
 		if err != nil {
+			klog.Infof("run 6")
 			a.setCurrentReplicasInStatus(gpa, currentReplicas)
 			if err := a.updateStatusIfNeeded(gpaStatusOriginal, gpa); err != nil {
 				utilruntime.HandleError(err)
@@ -976,6 +981,7 @@ func (a *GeneralController) reconcileAutoscaler(gpa *autoscaling.GeneralPodAutos
 	}
 
 	if rescale {
+		klog.Infof("run 7")
 		scale.Spec.Replicas = desiredReplicas
 		_, err = a.scaleNamespacer.Scales(gpa.Namespace).Update(targetGR, scale)
 		if err != nil {
@@ -997,6 +1003,7 @@ func (a *GeneralController) reconcileAutoscaler(gpa *autoscaling.GeneralPodAutos
 		klog.Infof("Successful rescale of %s, old size: %d, new size: %d, reason: %s",
 			gpa.Name, currentReplicas, desiredReplicas, rescaleReason)
 	} else {
+		klog.Infof("run 8")
 		klog.V(4).Infof("decided not to scale %s to %v (last scale time was %s)",
 			reference, desiredReplicas, gpa.Status.LastScaleTime)
 		desiredReplicas = currentReplicas
