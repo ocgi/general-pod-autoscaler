@@ -65,16 +65,16 @@ func (s *CronMetricsScaler) GetReplicas(gpa *v1alpha1.GeneralPodAutoscaler, curr
 }
 
 // get current cron config max and min replicas
-func (s *CronMetricsScaler) GetCurrentMaxAndMinReplicas(gpa *v1alpha1.GeneralPodAutoscaler) (int32, int32, bool) {
+func (s *CronMetricsScaler) GetCurrentMaxAndMinReplicas(gpa *v1alpha1.GeneralPodAutoscaler) (int32, int32, string, bool) {
 	var max, min int32
 	//only one schedule satisfy
 	for _, cr := range s.ranges {
 		misMatch, finalMatch, err := s.getFinalMatchAndMisMatch(gpa, cr.Schedule)
 		if err != nil {
 			klog.Error(err)
-			return max, min, false
+			return max, min, recordCronMetricsScheduleName, false
 		}
-		klog.Infof("firstMisMatch: %v, finalMatch: %v", misMatch, finalMatch)
+		klog.Infof("firstMisMatch: %v, finalMatch: %v, schedule: %v", misMatch, finalMatch, cr.Schedule)
 		if finalMatch == nil {
 			continue
 		} else {
@@ -82,10 +82,10 @@ func (s *CronMetricsScaler) GetCurrentMaxAndMinReplicas(gpa *v1alpha1.GeneralPod
 			min = *cr.MinReplicas
 			recordCronMetricsScheduleName = cr.Schedule
 			klog.Infof("Schedule %v recommend %v max replicas, min replicas: %v", cr.Schedule, max, min)
-			return max, min, true
+			return max, min, recordCronMetricsScheduleName, true
 		}
 	}
-	return max, min, false
+	return max, min, recordCronMetricsScheduleName, false
 }
 
 // ScalerName returns scaler name

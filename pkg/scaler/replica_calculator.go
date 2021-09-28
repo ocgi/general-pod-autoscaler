@@ -31,9 +31,10 @@ package scaler
 import (
 	"encoding/json"
 	"fmt"
-	"k8s.io/klog"
 	"math"
 	"time"
+
+	"k8s.io/klog"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
