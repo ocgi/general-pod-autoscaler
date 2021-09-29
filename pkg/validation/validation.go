@@ -182,8 +182,9 @@ func validateCronMetric(cronMetricMode *autoscaling.CronMetricMode, fldPath *fie
 				continue
 			}
 			schSet := mapset.NewSet()
+			next := start
 			for {
-				next := sch.Next(start)
+				next = sch.Next(next)
 				schSet.Add(next)
 				if next.Month() != start.Month() {
 					break
@@ -193,7 +194,7 @@ func validateCronMetric(cronMetricMode *autoscaling.CronMetricMode, fldPath *fie
 		}
 	}
 	for i := 0; i <= len(setSlice); i++ {
-		for j := i + 1; j <= len(setSlice); j++ {
+		for j := i + 1; j < len(setSlice); j++ {
 			IntersectSet := setSlice[i].Intersect(setSlice[j])
 			if IntersectSet.Cardinality() > 0 {
 				klog.Infof("Run validate 2")
