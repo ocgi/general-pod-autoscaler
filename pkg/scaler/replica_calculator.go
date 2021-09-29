@@ -136,6 +136,7 @@ func (c *ReplicaCalculator) GetResourceReplicas(currentReplicas int32, targetUti
 	}
 
 	if len(missingPods) > 0 {
+		klog.V(4).Infof("GetResourceUtilizationRatio missingPods=%v ", missingPods)
 		if usageRatio < 1.0 {
 			// on a scale-down, treat missing pods as using 100% of the resource request
 			for podName := range missingPods {
