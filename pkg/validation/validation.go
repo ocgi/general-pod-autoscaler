@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"time"
 
+	"k8s.io/klog"
+
 	"github.com/robfig/cron"
 	"k8s.io/api/admissionregistration/v1beta1"
 	apimachineryvalidation "k8s.io/apimachinery/pkg/api/validation"
@@ -65,6 +67,7 @@ func validateHorizontalPodAutoscalerSpec(autoscaler autoscaling.GeneralPodAutosc
 		}
 	}
 	if autoscaler.AutoScalingDrivenMode.CronMetricMode != nil {
+		klog.Infof("Run validate 1")
 		if refErrs := validateCronMetric(autoscaler.AutoScalingDrivenMode.CronMetricMode, fldPath.Child("cronMetric"), minReplicasLowerBound); len(refErrs) > 0 {
 			allErrs = append(allErrs, refErrs...)
 		}
@@ -193,6 +196,7 @@ func validateCronMetric(cronMetricMode *autoscaling.CronMetricMode, fldPath *fie
 		for j := i + 1; j <= len(setSlice); j++ {
 			IntersectSet := setSlice[i].Intersect(setSlice[j])
 			if IntersectSet.Cardinality() > 0 {
+				klog.Infof("Run validate 2")
 				allErrs = append(allErrs, field.Forbidden(fldPath.Child("schedule"), fmt.Sprintf("schedule time conflict,one conflict time content: %s",
 					IntersectSet.ToSlice()[0].(time.Time).Format("2006/1/2 15:04:05"))))
 				break
