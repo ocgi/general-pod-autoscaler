@@ -48,27 +48,28 @@ func validateHorizontalPodAutoscalerSpec(autoscaler autoscaling.GeneralPodAutosc
 	minReplicasLowerBound int32) field.ErrorList {
 	allErrs := field.ErrorList{}
 
-	if autoscaler.MinReplicas != nil && *autoscaler.MinReplicas < minReplicasLowerBound {
-		allErrs = append(allErrs, field.Invalid(fldPath.Child("minReplicas"), *autoscaler.MinReplicas,
-			fmt.Sprintf("must be greater than or equal to %d", minReplicasLowerBound)))
-	}
-	if autoscaler.MaxReplicas < 1 {
-		allErrs = append(allErrs, field.Invalid(fldPath.Child("maxReplicas"), autoscaler.MaxReplicas, "must be greater than 0"))
-	}
-	if autoscaler.MinReplicas != nil && autoscaler.MaxReplicas < *autoscaler.MinReplicas {
-		allErrs = append(allErrs, field.Invalid(fldPath.Child("maxReplicas"), autoscaler.MaxReplicas, "must be greater than or equal to `minReplicas`"))
+	if autoscaler.AutoScalingDrivenMode.CronMetricMode != nil {
+		klog.Infof("Run validate 1")
+		if refErrs := validateCronMetric(autoscaler.AutoScalingDrivenMode.CronMetricMode, fldPath.Child("cronMetric"), minReplicasLowerBound); len(refErrs) > 0 {
+			allErrs = append(allErrs, refErrs...)
+		}
+	} else {
+		if autoscaler.MinReplicas != nil && *autoscaler.MinReplicas < minReplicasLowerBound {
+			allErrs = append(allErrs, field.Invalid(fldPath.Child("minReplicas"), *autoscaler.MinReplicas,
+				fmt.Sprintf("must be greater than or equal to %d", minReplicasLowerBound)))
+		}
+		if autoscaler.MaxReplicas < 1 {
+			allErrs = append(allErrs, field.Invalid(fldPath.Child("maxReplicas"), autoscaler.MaxReplicas, "must be greater than 0"))
+		}
+		if autoscaler.MinReplicas != nil && autoscaler.MaxReplicas < *autoscaler.MinReplicas {
+			allErrs = append(allErrs, field.Invalid(fldPath.Child("maxReplicas"), autoscaler.MaxReplicas, "must be greater than or equal to `minReplicas`"))
+		}
 	}
 	if refErrs := ValidateCrossVersionObjectReference(autoscaler.ScaleTargetRef, fldPath.Child("scaleTargetRef")); len(refErrs) > 0 {
 		allErrs = append(allErrs, refErrs...)
 	}
 	if autoscaler.AutoScalingDrivenMode.MetricMode != nil {
 		if refErrs := validateMetrics(autoscaler.AutoScalingDrivenMode.MetricMode.Metrics, fldPath.Child("metrics"), autoscaler.MinReplicas); len(refErrs) > 0 {
-			allErrs = append(allErrs, refErrs...)
-		}
-	}
-	if autoscaler.AutoScalingDrivenMode.CronMetricMode != nil {
-		klog.Infof("Run validate 1")
-		if refErrs := validateCronMetric(autoscaler.AutoScalingDrivenMode.CronMetricMode, fldPath.Child("cronMetric"), minReplicasLowerBound); len(refErrs) > 0 {
 			allErrs = append(allErrs, refErrs...)
 		}
 	}
