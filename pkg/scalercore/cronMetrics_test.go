@@ -74,7 +74,7 @@ func TestInCronSchedule(t *testing.T) {
 			testTime = tc.time
 		}
 		cron := &CronMetricsScaler{ranges: tc.mode.CronMetrics, name: Cron, now: testTime}
-		actualMin, actualMax, schedule, _ := cron.GetCurrentMaxAndMinReplicas(defaultGPA)
+		actualMax, actualMin, schedule, _ := cron.GetCurrentMaxAndMinReplicas(defaultGPA)
 		if actualMin != 6 || actualMax != 8 {
 			t.Errorf("desired min: %v, max: %v, actual min: %v, max: %v", min2, max2, actualMin, actualMax)
 		}
