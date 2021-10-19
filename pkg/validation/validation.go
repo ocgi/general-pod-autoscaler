@@ -153,6 +153,12 @@ func ValidateHorizontalPodAutoscalerStatusUpdate(newAutoscaler, oldAutoscaler *a
 	return allErrs
 }
 
+// CronMetric set to check conflict
+type CronSet struct {
+	schedule string
+	set      mapset.Set
+}
+
 func validateCronMetric(cronMetricMode *autoscaling.CronMetricMode, fldPath *field.Path, minReplicasLowerBound int32) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if len(cronMetricMode.CronMetrics) == 0 {
@@ -162,7 +168,7 @@ func validateCronMetric(cronMetricMode *autoscaling.CronMetricMode, fldPath *fie
 		allErrs = append(allErrs, field.Invalid(fldPath.Child("defaultReplicas"), cronMetricMode.DefaultReplicas, "must be greater than 0"))
 	}
 	start := time.Now()
-	setSlice := make([]mapset.Set, 0)
+	setSlice := make([]CronSet, 0)
 	for _, cronRange := range cronMetricMode.CronMetrics {
 		if cronRange.MinReplicas != nil && *cronRange.MinReplicas < minReplicasLowerBound {
 			allErrs = append(allErrs, field.Invalid(fldPath.Child("minReplicas"), *cronRange.MinReplicas,
@@ -191,16 +197,19 @@ func validateCronMetric(cronMetricMode *autoscaling.CronMetricMode, fldPath *fie
 					break
 				}
 			}
-			setSlice = append(setSlice, schSet)
+			setSlice = append(setSlice, CronSet{
+				cronRange.Schedule,
+				schSet,
+			})
 		}
 	}
 	for i := 0; i <= len(setSlice); i++ {
 		for j := i + 1; j < len(setSlice); j++ {
-			IntersectSet := setSlice[i].Intersect(setSlice[j])
+			IntersectSet := setSlice[i].set.Intersect(setSlice[j].set)
 			if IntersectSet.Cardinality() > 0 {
 				klog.Infof("Run validate 2")
-				allErrs = append(allErrs, field.Forbidden(fldPath.Child("schedule"), fmt.Sprintf("schedule time conflict,one conflict time content: %s",
-					IntersectSet.ToSlice()[0].(time.Time).Format("2006/1/2 15:04:05"))))
+				allErrs = append(allErrs, field.Forbidden(fldPath.Child("schedule"), fmt.Sprintf("schedule time conflict, schedule: %s conflict with %s",
+					setSlice[i].schedule, setSlice[j].schedule)))
 				break
 			}
 		}
