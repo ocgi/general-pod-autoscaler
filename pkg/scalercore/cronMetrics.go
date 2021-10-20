@@ -79,6 +79,10 @@ func (s *CronMetricsScaler) GetCurrentMaxAndMinReplicas(gpa *v1alpha1.GeneralPod
 	var max, min int32
 	//only one schedule satisfy
 	for _, cr := range s.ranges {
+		if cr.Schedule == "default" {
+			//ignore `default` cron set
+			continue
+		}
 		misMatch, finalMatch, err := s.getFinalMatchAndMisMatch(gpa, cr.Schedule)
 		if err != nil {
 			klog.Error(err)
