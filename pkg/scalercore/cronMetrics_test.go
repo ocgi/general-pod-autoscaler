@@ -46,7 +46,11 @@ func TestInCronSchedule(t *testing.T) {
 		},
 		Status: v1alpha1.GeneralPodAutoscalerStatus{},
 	}
-
+	def := v1alpha1.CronMetricSpec{
+		Schedule:    "default",
+		MinReplicas: intPtr(9),
+		MaxReplicas: 10,
+	}
 	tc := TestCronSchedule{
 		name: "single timeRange, out of range",
 		mode: v1alpha1.CronMetricMode{
@@ -61,11 +65,7 @@ func TestInCronSchedule(t *testing.T) {
 					MinReplicas: intPtr(6),
 					MaxReplicas: 8,
 				},
-				{
-					Schedule:    "default",
-					MinReplicas: intPtr(9),
-					MaxReplicas: 10,
-				},
+				def,
 			},
 		},
 	}
@@ -78,7 +78,7 @@ func TestInCronSchedule(t *testing.T) {
 		if !tc.time.IsZero() {
 			testTime = tc.time
 		}
-		cron := &CronMetricsScaler{ranges: tc.mode.CronMetrics, name: Cron, now: testTime}
+		cron := &CronMetricsScaler{ranges: tc.mode.CronMetrics, name: Cron, now: testTime, defaultSet: def}
 		actualMax, actualMin, schedule := cron.GetCurrentMaxAndMinReplicas(defaultGPA)
 		if actualMin != 6 || actualMax != 8 {
 			t.Errorf("desired min: 6, max: 8, actual min: %v, max: %v", actualMin, actualMax)
@@ -103,6 +103,11 @@ func TestNotInCronSchedule(t *testing.T) {
 			LastCronScheduleTime: &lastTime,
 		},
 	}
+	def := v1alpha1.CronMetricSpec{
+		Schedule:    "default",
+		MinReplicas: intPtr(9),
+		MaxReplicas: 10,
+	}
 	tc := TestCronSchedule{
 		name: "single timeRange, out of range",
 		mode: v1alpha1.CronMetricMode{
@@ -117,11 +122,7 @@ func TestNotInCronSchedule(t *testing.T) {
 					MinReplicas: intPtr(6),
 					MaxReplicas: 8,
 				},
-				{
-					Schedule:    "default",
-					MinReplicas: intPtr(9),
-					MaxReplicas: 10,
-				},
+				def,
 			},
 		},
 	}
@@ -134,7 +135,7 @@ func TestNotInCronSchedule(t *testing.T) {
 		if !tc.time.IsZero() {
 			testTime = tc.time
 		}
-		cron := &CronMetricsScaler{ranges: tc.mode.CronMetrics, name: Cron, now: testTime}
+		cron := &CronMetricsScaler{ranges: tc.mode.CronMetrics, name: Cron, now: testTime, defaultSet: def}
 		_, _, schedule := cron.GetCurrentMaxAndMinReplicas(defaultGPA)
 		if schedule != "default" {
 			t.Errorf("desired schedule: `default`, actual schedule: %v", schedule)
@@ -156,6 +157,11 @@ func TestAcrossPeriods(t *testing.T) {
 			LastCronScheduleTime: &lastTime,
 		},
 	}
+	def := v1alpha1.CronMetricSpec{
+		Schedule:    "default",
+		MinReplicas: intPtr(9),
+		MaxReplicas: 10,
+	}
 	tc := TestCronSchedule{
 		name: "single timeRange, out of range",
 		mode: v1alpha1.CronMetricMode{
@@ -170,11 +176,7 @@ func TestAcrossPeriods(t *testing.T) {
 					MinReplicas: intPtr(6),
 					MaxReplicas: 8,
 				},
-				{
-					Schedule:    "default",
-					MinReplicas: intPtr(9),
-					MaxReplicas: 10,
-				},
+				def,
 			},
 		},
 	}
@@ -187,7 +189,7 @@ func TestAcrossPeriods(t *testing.T) {
 		if !tc.time.IsZero() {
 			testTime = tc.time
 		}
-		cron := &CronMetricsScaler{ranges: tc.mode.CronMetrics, name: Cron, now: testTime}
+		cron := &CronMetricsScaler{ranges: tc.mode.CronMetrics, name: Cron, now: testTime, defaultSet: def}
 		_, _, schedule := cron.GetCurrentMaxAndMinReplicas(defaultGPA)
 		if schedule != "default" {
 			t.Errorf("desired schedule: `default`, actual schedule: %v", schedule)
