@@ -164,9 +164,9 @@ func validateCronMetric(cronMetricMode *autoscaling.CronMetricMode, fldPath *fie
 	if len(cronMetricMode.CronMetrics) == 0 {
 		allErrs = append(allErrs, field.Forbidden(fldPath.Child("cronMetrics"), "at least one cronMetrics should set"))
 	}
-	if cronMetricMode.DefaultReplicas < 1 {
-		allErrs = append(allErrs, field.Invalid(fldPath.Child("defaultReplicas"), cronMetricMode.DefaultReplicas, "must be greater than 0"))
-	}
+	//if cronMetricMode.DefaultReplicas < 1 {
+	//	allErrs = append(allErrs, field.Invalid(fldPath.Child("defaultReplicas"), cronMetricMode.DefaultReplicas, "must be greater than 0"))
+	//}
 	start := time.Now()
 	setSlice := make([]CronSet, 0)
 	var defaultSetNum int

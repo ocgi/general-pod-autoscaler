@@ -177,7 +177,7 @@ type CronMetricMode struct {
 	CronMetrics []CronMetricSpec `json:"cronMetrics,omitempty" protobuf:"bytes,1,opt,name=cronMetrics"`
 
 	// miss Cron time, set default replicas.
-	DefaultReplicas int32 `json:"defaultReplicas" protobuf:"varint,3,opt,name=maxReplicas"`
+	//DefaultReplicas int32 `json:"defaultReplicas" protobuf:"varint,3,opt,name=maxReplicas"`
 }
 
 type CronMetricSpec struct {
