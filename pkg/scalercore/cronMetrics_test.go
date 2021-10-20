@@ -31,10 +31,11 @@ type TestCronSchedule struct {
 	time    time.Time
 }
 
+func intPtr(v int32) *int32 {
+	return &v
+}
+
 func TestInCronSchedule(t *testing.T) {
-	var min1, max1 int32 = 5, 7
-	var min2, max2 int32 = 6, 8
-	var schedule1, schedule2 = "*/1 10-12 * * *", "*/1 9-10 * * *"
 	testTime1, err := time.Parse("2006-01-02 15:04:05", "2020-12-18 09:04:41")
 	if err != nil {
 		t.Fatal(err)
@@ -51,19 +52,19 @@ func TestInCronSchedule(t *testing.T) {
 		mode: v1alpha1.CronMetricMode{
 			CronMetrics: []v1alpha1.CronMetricSpec{
 				{
-					Schedule:    schedule1,
-					MinReplicas: &min1,
-					MaxReplicas: max1,
+					Schedule:    "*/1 10-12 * * *",
+					MinReplicas: intPtr(5),
+					MaxReplicas: 7,
 				},
 				{
-					Schedule:    schedule2,
-					MinReplicas: &min2,
-					MaxReplicas: max2,
+					Schedule:    "*/1 9-10 * * *",
+					MinReplicas: intPtr(6),
+					MaxReplicas: 8,
 				},
 				{
 					Schedule:    "default",
-					MinReplicas: &min2,
-					MaxReplicas: max2,
+					MinReplicas: intPtr(9),
+					MaxReplicas: 10,
 				},
 			},
 		},
@@ -80,18 +81,15 @@ func TestInCronSchedule(t *testing.T) {
 		cron := &CronMetricsScaler{ranges: tc.mode.CronMetrics, name: Cron, now: testTime}
 		actualMax, actualMin, schedule := cron.GetCurrentMaxAndMinReplicas(defaultGPA)
 		if actualMin != 6 || actualMax != 8 {
-			t.Errorf("desired min: %v, max: %v, actual min: %v, max: %v", min2, max2, actualMin, actualMax)
+			t.Errorf("desired min: 6, max: 8, actual min: %v, max: %v", actualMin, actualMax)
 		}
-		if schedule != schedule2 {
-			t.Errorf("desired schedule: %v, actual schedule: %v", schedule2, schedule)
+		if schedule != "*/1 9-10 * * *" {
+			t.Errorf("desired schedule: `*/1 9-10 * * *`, actual schedule: %v", schedule)
 		}
 	})
 }
 
 func TestNotInCronSchedule(t *testing.T) {
-	var min1, max1 int32 = 5, 7
-	var min2, max2 int32 = 6, 8
-	var schedule1, schedule2 = "*/1 10-12 * * *", "*/1 9-10 * * *"
 	testTime1, err := time.Parse("2006-01-02 15:04:05", "2020-12-18 13:04:41")
 	if err != nil {
 		t.Fatal(err)
@@ -110,17 +108,21 @@ func TestNotInCronSchedule(t *testing.T) {
 		mode: v1alpha1.CronMetricMode{
 			CronMetrics: []v1alpha1.CronMetricSpec{
 				{
-					Schedule:    schedule1,
-					MinReplicas: &min1,
-					MaxReplicas: max1,
+					Schedule:    "*/1 10-12 * * *",
+					MinReplicas: intPtr(5),
+					MaxReplicas: 7,
 				},
 				{
-					Schedule:    schedule2,
-					MinReplicas: &min2,
-					MaxReplicas: max2,
+					Schedule:    "*/1 9-10 * * *",
+					MinReplicas: intPtr(6),
+					MaxReplicas: 8,
+				},
+				{
+					Schedule:    "default",
+					MinReplicas: intPtr(9),
+					MaxReplicas: 10,
 				},
 			},
-			DefaultReplicas: 5,
 		},
 	}
 	t.Run(tc.name, func(t *testing.T) {
@@ -141,9 +143,6 @@ func TestNotInCronSchedule(t *testing.T) {
 }
 
 func TestAcrossPeriods(t *testing.T) {
-	var min1, max1 int32 = 5, 7
-	var min2, max2 int32 = 6, 8
-	var schedule1, schedule2 = "0-59 10-12 * * *", "30-59 13-16 * * *"
 	testTime1, err := time.Parse("2006-01-02 15:04:05", "2020-12-18 12:59:41")
 	if err != nil {
 		t.Fatal(err)
@@ -162,17 +161,21 @@ func TestAcrossPeriods(t *testing.T) {
 		mode: v1alpha1.CronMetricMode{
 			CronMetrics: []v1alpha1.CronMetricSpec{
 				{
-					Schedule:    schedule1,
-					MinReplicas: &min1,
-					MaxReplicas: max1,
+					Schedule:    "0-59 10-12 * * *",
+					MinReplicas: intPtr(5),
+					MaxReplicas: 7,
 				},
 				{
-					Schedule:    schedule2,
-					MinReplicas: &min2,
-					MaxReplicas: max2,
+					Schedule:    "30-59 13-16 * * *",
+					MinReplicas: intPtr(6),
+					MaxReplicas: 8,
+				},
+				{
+					Schedule:    "default",
+					MinReplicas: intPtr(9),
+					MaxReplicas: 10,
 				},
 			},
-			DefaultReplicas: 5,
 		},
 	}
 	t.Run(tc.name, func(t *testing.T) {
