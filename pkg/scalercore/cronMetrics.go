@@ -28,14 +28,24 @@ var recordCronMetricsScheduleName = ""
 
 // CronScaler is a crontab GPA
 type CronMetricsScaler struct {
-	ranges []v1alpha1.CronMetricSpec
-	name   string
-	now    time.Time
+	ranges     []v1alpha1.CronMetricSpec
+	defaultSet v1alpha1.CronMetricSpec
+	name       string
+	now        time.Time
 }
 
 // NewCronScaler initializer crontab GPA
 func NewCronMetricsScaler(ranges []v1alpha1.CronMetricSpec) *CronMetricsScaler {
-	return &CronMetricsScaler{ranges: ranges, name: Cron, now: time.Now()}
+	var def v1alpha1.CronMetricSpec
+	filter := make([]v1alpha1.CronMetricSpec, 0)
+	for _, cr := range ranges {
+		if cr.Schedule != "default" {
+			filter = append(filter, cr)
+		} else {
+			def = cr
+		}
+	}
+	return &CronMetricsScaler{ranges: filter, name: Cron, now: time.Now(), defaultSet: def}
 }
 
 // GetReplicas return replicas  recommend by crontab GPA
@@ -65,14 +75,14 @@ func (s *CronMetricsScaler) GetReplicas(gpa *v1alpha1.GeneralPodAutoscaler, curr
 }
 
 // get current cron config max and min replicas
-func (s *CronMetricsScaler) GetCurrentMaxAndMinReplicas(gpa *v1alpha1.GeneralPodAutoscaler) (int32, int32, string, bool) {
+func (s *CronMetricsScaler) GetCurrentMaxAndMinReplicas(gpa *v1alpha1.GeneralPodAutoscaler) (int32, int32, string) {
 	var max, min int32
 	//only one schedule satisfy
 	for _, cr := range s.ranges {
 		misMatch, finalMatch, err := s.getFinalMatchAndMisMatch(gpa, cr.Schedule)
 		if err != nil {
 			klog.Error(err)
-			return max, min, recordCronMetricsScheduleName, false
+			return max, min, recordCronMetricsScheduleName
 		}
 		klog.Infof("firstMisMatch: %v, finalMatch: %v, schedule: %v", misMatch, finalMatch, cr.Schedule)
 		if finalMatch == nil {
@@ -82,10 +92,14 @@ func (s *CronMetricsScaler) GetCurrentMaxAndMinReplicas(gpa *v1alpha1.GeneralPod
 			min = *cr.MinReplicas
 			recordCronMetricsScheduleName = cr.Schedule
 			klog.Infof("Schedule %v recommend %v max replicas, min replicas: %v", cr.Schedule, max, min)
-			return max, min, recordCronMetricsScheduleName, true
+			return max, min, recordCronMetricsScheduleName
 		}
 	}
-	return max, min, recordCronMetricsScheduleName, false
+	//use defaultSet max min replicas
+	max = s.defaultSet.MaxReplicas
+	min = *s.defaultSet.MinReplicas
+	recordCronMetricsScheduleName = s.defaultSet.Schedule
+	return max, min, recordCronMetricsScheduleName
 }
 
 // ScalerName returns scaler name

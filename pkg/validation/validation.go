@@ -169,6 +169,7 @@ func validateCronMetric(cronMetricMode *autoscaling.CronMetricMode, fldPath *fie
 	}
 	start := time.Now()
 	setSlice := make([]CronSet, 0)
+	var defaultSetNum int
 	for _, cronRange := range cronMetricMode.CronMetrics {
 		if cronRange.MinReplicas != nil && *cronRange.MinReplicas < minReplicasLowerBound {
 			allErrs = append(allErrs, field.Invalid(fldPath.Child("minReplicas"), *cronRange.MinReplicas,
@@ -183,6 +184,11 @@ func validateCronMetric(cronMetricMode *autoscaling.CronMetricMode, fldPath *fie
 		if len(cronRange.Schedule) == 0 {
 			allErrs = append(allErrs, field.Forbidden(fldPath.Child("schedule"), "should not empty"))
 		} else {
+			if cronRange.Schedule == "default" {
+				//default cron set, ignore conflict check
+				defaultSetNum += 1
+				continue
+			}
 			sch, err := cron.ParseStandard(cronRange.Schedule)
 			if err != nil {
 				allErrs = append(allErrs, field.Forbidden(fldPath.Child("schedule"), err.Error()))
@@ -202,6 +208,9 @@ func validateCronMetric(cronMetricMode *autoscaling.CronMetricMode, fldPath *fie
 				schSet,
 			})
 		}
+	}
+	if defaultSetNum > 1 {
+		allErrs = append(allErrs, field.Forbidden(fldPath.Child("cronMetrics"), "only one `default` schedule cronMetrics should set"))
 	}
 	for i := 0; i <= len(setSlice); i++ {
 		for j := i + 1; j < len(setSlice); j++ {
