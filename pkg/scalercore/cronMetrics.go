@@ -89,6 +89,7 @@ func (s *CronMetricsScaler) GetCurrentMaxAndMinReplicas(gpa *v1alpha1.GeneralPod
 		}
 		misMatch, finalMatch, err := s.getFinalMatchAndMisMatch(gpa, cr.Schedule)
 		if err != nil {
+			//can't get final, use default max min replicas, avoid use 0 0 replace
 			klog.Error(err)
 			return max, min, recordCronMetricsScheduleName
 		}
