@@ -4,6 +4,7 @@ go 1.14
 
 require (
 	github.com/beorn7/perks v1.0.1 // indirect
+	github.com/deckarep/golang-set v1.7.1
 	github.com/evanphx/json-patch v4.9.0+incompatible // indirect
 	github.com/golang/groupcache v0.0.0-20190129154638-5b532d6fd5ef // indirect
 	github.com/google/go-cmp v0.5.2 // indirect

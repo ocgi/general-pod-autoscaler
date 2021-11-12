@@ -1,0 +1,22 @@
+apiVersion: autoscaling.ocgi.dev/v1alpha1
+kind: GeneralPodAutoscaler
+metadata:
+  name: cronhpa
+spec:
+  cronMetric:
+    defaultReplicas: 5
+    cronMetrics:
+      - containerResource:
+          container: gindemo
+          name: cpu
+          target:
+            averageUtilization: 50
+            type: Utilization
+        type: ContainerResource
+        schedule: "0-59 9-19 * * *"
+        minReplicas: 3
+        maxReplicas: 7
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: deployment
+    name: gindemo-dev

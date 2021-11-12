@@ -320,6 +320,63 @@ func (a *GeneralController) computeReplicasForMetrics(gpa *autoscaling.GeneralPo
 	return replicas, metric, statuses, timestamp, nil
 }
 
+// computeReplicasForCronMetrics computes the desired number of replicas for the metric specifications listed in the GPA,
+// returning the maximum  of the computed replica counts, a description of the associated metric, and the statuses of
+// all metrics computed.
+func (a *GeneralController) computeReplicasForCronMetrics(gpa *autoscaling.GeneralPodAutoscaler, scale *autoscalinginternal.Scale,
+	metricSpecs []autoscaling.CronMetricSpec, scheduleName string) (replicas int32, metric string, statuses []autoscaling.MetricStatus, timestamp time.Time, err error) {
+	if scale.Status.Selector == "" {
+		errMsg := "selector is required"
+		a.eventRecorder.Event(gpa, v1.EventTypeWarning, "SelectorRequired", errMsg)
+		setCondition(gpa, autoscaling.ScalingActive, v1.ConditionFalse, "InvalidSelector",
+			"the GPA target's scale is missing a selector")
+		return 0, "", nil, time.Time{}, fmt.Errorf(errMsg)
+	}
+
+	selector, err := labels.Parse(scale.Status.Selector)
+	if err != nil {
+		errMsg := fmt.Sprintf("couldn't convert selector into a corresponding internal selector object: %v", err)
+		a.eventRecorder.Event(gpa, v1.EventTypeWarning, "InvalidSelector", errMsg)
+		setCondition(gpa, autoscaling.ScalingActive, v1.ConditionFalse, "InvalidSelector", errMsg)
+		return 0, "", nil, time.Time{}, fmt.Errorf(errMsg)
+	}
+	specReplicas := scale.Spec.Replicas
+	statusReplicas := scale.Status.Replicas
+	statuses = make([]autoscaling.MetricStatus, len(metricSpecs))
+
+	invalidMetricsCount := 0
+	var invalidMetricError error
+	var invalidMetricCondition autoscaling.GeneralPodAutoscalerCondition
+
+	for i, metricSpec := range metricSpecs {
+		replicaCountProposal, metricNameProposal, timestampProposal, condition, err := a.computeReplicasForCronMetric(gpa,
+			metricSpec, specReplicas, statusReplicas, selector, &statuses[i])
+		if err != nil {
+			if invalidMetricsCount <= 0 {
+				invalidMetricCondition = condition
+				invalidMetricError = err
+			}
+			invalidMetricsCount++
+		}
+		if err == nil && (replicas == 0 || replicaCountProposal > replicas) {
+			timestamp = timestampProposal
+			replicas = replicaCountProposal
+			metric = fmt.Sprintf("cron %s %s", scheduleName, metricNameProposal)
+		}
+	}
+
+	// If all metrics are invalid return error and set condition on gpa based on first invalid metric.
+	if invalidMetricsCount >= len(metricSpecs) {
+		setCondition(gpa, invalidMetricCondition.Type, invalidMetricCondition.Status, invalidMetricCondition.Reason,
+			invalidMetricCondition.Message)
+		return 0, "", statuses, time.Time{}, fmt.Errorf("invalid metrics (%v invalid out of %v), "+
+			"first error is: %v", invalidMetricsCount, len(metricSpecs), invalidMetricError)
+	}
+	setCondition(gpa, autoscaling.ScalingActive, v1.ConditionTrue, "ValidMetricFound",
+		"the GPA was able to successfully calculate a replica count from %s", metric)
+	return replicas, metric, statuses, timestamp, nil
+}
+
 // computeReplicasForSimple computes the desired number of replicas for the metric specifications listed in the GPA,
 // returning the maximum  of the computed replica counts, a description of the associated metric, and the statuses of
 // all metrics computed.
@@ -460,6 +517,25 @@ func (a *GeneralController) computeReplicasForMetric(gpa *autoscaling.GeneralPod
 		return 0, "", time.Time{}, condition, err
 	}
 	return replicaCountProposal, metricNameProposal, timestampProposal, autoscaling.GeneralPodAutoscalerCondition{}, nil
+}
+
+// Computes the desired number of replicas for a specific gpa and metric specification,
+// returning the metric status and a proposed condition to be set on the GPA object.
+func (a *GeneralController) computeReplicasForCronMetric(gpa *autoscaling.GeneralPodAutoscaler, spec autoscaling.CronMetricSpec,
+	specReplicas, statusReplicas int32, selector labels.Selector, status *autoscaling.MetricStatus) (replicaCountProposal int32, metricNameProposal string,
+	timestampProposal time.Time, condition autoscaling.GeneralPodAutoscalerCondition, err error) {
+	replicaCountProposal, metricNameProposal, timestampProposal, condition, err = a.computeReplicasForMetric(gpa, spec.MetricSpec, specReplicas, statusReplicas, selector, status)
+
+	max := gpa.Spec.MaxReplicas
+	min := *gpa.Spec.MinReplicas
+	if replicaCountProposal < min {
+		replicaCountProposal = min
+	}
+	if replicaCountProposal > max {
+		replicaCountProposal = max
+	}
+
+	return replicaCountProposal, metricNameProposal, timestampProposal, condition, err
 }
 
 func (a *GeneralController) reconcileKey(key string) (deleted bool, err error) {
@@ -763,7 +839,15 @@ func (a *GeneralController) reconcileAutoscaler(gpa *autoscaling.GeneralPodAutos
 	rescaleReason := ""
 
 	var minReplicas int32
-
+	var max, min int32
+	var scheduleName string
+	if gpa.Spec.CronMetricMode != nil {
+		cronMetricsScale := scalercore.NewCronMetricsScaler(gpa.Spec.CronMetricMode.CronMetrics)
+		max, min, scheduleName = cronMetricsScale.GetCurrentMaxAndMinReplicas(gpa)
+		klog.Infof("current cron schedule: %s, max: %v, min: %v", scheduleName, max, min)
+		gpa.Spec.MinReplicas = &min
+		gpa.Spec.MaxReplicas = max
+	}
 	if gpa.Spec.MinReplicas != nil {
 		minReplicas = *gpa.Spec.MinReplicas
 	} else {
@@ -793,11 +877,13 @@ func (a *GeneralController) reconcileAutoscaler(gpa *autoscaling.GeneralPodAutos
 		case gpa.Spec.MetricMode != nil:
 			metricDesiredReplicas, metricName, metricStatuses, metricTimestamp, err = a.computeReplicasForMetrics(gpa,
 				scale, gpa.Spec.MetricMode.Metrics)
+		case gpa.Spec.CronMetricMode != nil:
+			metricDesiredReplicas, metricName, metricStatuses, metricTimestamp, err = a.computeReplicasForCronMetrics(gpa,
+				scale, gpa.Spec.CronMetricMode.CronMetrics, scheduleName)
 		default:
 			metricDesiredReplicas, metricName, metricStatuses, metricTimestamp, err = a.computeReplicasForSimple(gpa,
 				scale)
 		}
-
 		if err != nil {
 			a.setCurrentReplicasInStatus(gpa, currentReplicas)
 			if err := a.updateStatusIfNeeded(gpaStatusOriginal, gpa); err != nil {
@@ -1372,7 +1458,7 @@ func (a *GeneralController) setStatus(gpa *autoscaling.GeneralPodAutoscaler, cur
 	}
 	now := metav1.NewTime(time.Now())
 	if rescale {
-		if gpa.Spec.TimeMode != nil {
+		if gpa.Spec.TimeMode != nil || gpa.Spec.CronMetricMode != nil {
 			gpa.Status.LastCronScheduleTime = &now
 		}
 		gpa.Status.LastScaleTime = &now
@@ -1474,7 +1560,7 @@ func min(a, b int32) int32 {
 }
 
 func isEmpty(a autoscaling.AutoScalingDrivenMode) bool {
-	return a.MetricMode == nil && a.EventMode == nil && a.TimeMode == nil && a.WebhookMode == nil
+	return a.MetricMode == nil && a.EventMode == nil && a.TimeMode == nil && a.WebhookMode == nil && a.CronMetricMode == nil
 }
 
 func isComputeByLimits(gpa *autoscaling.GeneralPodAutoscaler) bool {

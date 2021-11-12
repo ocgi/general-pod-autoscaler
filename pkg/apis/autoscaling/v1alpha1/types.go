@@ -84,6 +84,10 @@ type AutoScalingDrivenMode struct {
 	// +optional
 	MetricMode *MetricMode `json:"metric,omitempty" protobuf:"bytes,1,opt,name=metric"`
 
+	// CronMetricMode is cron metric driven mode
+	// +optional
+	CronMetricMode *CronMetricMode `json:"cronMetric,omitempty" protobuf:"bytes,1,opt,name=metric"`
+
 	// Webhook defines webhook mode the allow us to revive requests to scale.
 	// +optional
 	WebhookMode *WebhookMode `json:"webhook,omitempty" protobuf:"bytes,2,opt,name=webhook"`
@@ -158,6 +162,43 @@ type CrossVersionObjectReference struct {
 	// API version of the referent
 	// +optional
 	APIVersion string `json:"apiVersion,omitempty" protobuf:"bytes,3,opt,name=apiVersion"`
+}
+
+type CronMetricMode struct {
+	// metrics contains the specifications for which to use to calculate the
+	// desired replica count (the maximum replica count across all metrics will
+	// be used).  The desired replica count is calculated multiplying the
+	// ratio between the target value and the current value by the current
+	// number of pods.  Ergo, metrics used must decrease as the pod count is
+	// increased, and vice-versa.  See the individual metric source types for
+	// more information about how each type of metric must respond.
+	// If not set, the default metric will be set to 80% average CPU utilization.
+	// +optional
+	CronMetrics []CronMetricSpec `json:"cronMetrics,omitempty" protobuf:"bytes,1,opt,name=cronMetrics"`
+
+	// miss Cron time, set default replicas.
+	//DefaultReplicas int32 `json:"defaultReplicas" protobuf:"varint,3,opt,name=maxReplicas"`
+}
+
+type CronMetricSpec struct {
+	// Schedule should match crontab format
+	Schedule string `json:"schedule,omitempty" protobuf:"bytes,1,opt,name=schedule"`
+
+	// minReplicas is the lower limit for the number of replicas to which the autoscaler
+	// can scale down.  It defaults to 1 pod.  minReplicas is allowed to be 0 if the
+	// alpha feature gate GPAScaleToZero is enabled and at least one Object or External
+	// metric is configured.  Scaling is active as long as at least one metric value is
+	// available.
+	// +optional
+	MinReplicas *int32 `json:"minReplicas,omitempty" protobuf:"varint,2,opt,name=minReplicas"`
+
+	// maxReplicas is the upper limit for the number of replicas to which the autoscaler can scale up.
+	// It cannot be less that minReplicas.
+	MaxReplicas int32 `json:"maxReplicas" protobuf:"varint,3,opt,name=maxReplicas"`
+
+	// MetricSpec specifies how to scale based on a single metric
+	// (only `type` and one other matching field should be set at once).
+	MetricSpec
 }
 
 // MetricSpec specifies how to scale based on a single metric
