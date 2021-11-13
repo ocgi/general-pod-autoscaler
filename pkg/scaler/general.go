@@ -16,6 +16,7 @@
 package scaler
 
 import (
+	"encoding/json"
 	"fmt"
 	"math"
 	"reflect"
@@ -59,6 +60,18 @@ var (
 	scaleUpLimitMinimum = 4.0
 	computeByLimitsKey  = "compute-by-limits"
 )
+
+type ScaleEvent struct {
+	OldReplicas          int32   `json:"old_replicas"`
+	NewReplicas          int32   `json:"new_replicas"`
+	MinReplicas          int32   `json:"min_replicas"`
+	MaxReplicas          int32   `json:"max_replicas"`
+	CpuRequestsOfChanges float32 `json:"cpu_request_of_changes"` //increment/decrement of cpu requests
+	CpuLimitsOfChanges   float32 `json:"cpu_limits_of_changes"`  //increment/decrement of cpu requests
+	MemRequestsOfChanges float32 `json:"mem_request_of_changes"` //increment/decrement of cpu requests
+	MemLimitsOfChanges   float32 `json:"mem_limits_of_changes"`  //increment/decrement of cpu requests
+	Reason               string  `json:"reason"`
+}
 
 type timestampedRecommendation struct {
 	recommendation int32
@@ -769,6 +782,7 @@ func (a *GeneralController) recordInitialRecommendation(currentReplicas int32, k
 	}
 }
 
+//reconcileAutoscaler
 func (a *GeneralController) reconcileAutoscaler(gpa *autoscaling.GeneralPodAutoscaler, key string) error {
 	// make a copy so that we never mutate the shared informer cache (conversion can mutate the object)
 	gpaStatusOriginal := gpa.Status.DeepCopy()
@@ -933,11 +947,38 @@ func (a *GeneralController) reconcileAutoscaler(gpa *autoscaling.GeneralPodAutos
 			}
 			return fmt.Errorf("failed to rescale %s: %v", reference, err)
 		}
+		// calculatePodResources
+		var (
+			cpuRequests, cpuLimits, memRequests, memLimits float32
+			_err                                           error
+		)
+		cpuRequests, cpuLimits, memRequests, memLimits, _err = a.calculateOnePodResources(gpa.Namespace, scale.Status.Selector)
+		if _err != nil {
+			klog.Errorf("calculateOnePodResources error:%v", _err)
+		}
+		changeReplicas := float32(desiredReplicas - currentReplicas)
+		scaleEvt := ScaleEvent{
+			OldReplicas:          currentReplicas,
+			NewReplicas:          desiredReplicas,
+			MinReplicas:          *gpa.Spec.MinReplicas,
+			MaxReplicas:          gpa.Spec.MaxReplicas,
+			CpuRequestsOfChanges: changeReplicas * cpuRequests,
+			CpuLimitsOfChanges:   changeReplicas * cpuLimits,
+			MemRequestsOfChanges: changeReplicas * memRequests,
+			MemLimitsOfChanges:   changeReplicas * memLimits,
+			Reason:               rescaleReason,
+		}
 		setCondition(gpa, autoscaling.AbleToScale, v1.ConditionTrue,
 			"SucceededRescale", "the GPA controller was able to update the target scale to %d", desiredReplicas)
-		a.eventRecorder.Eventf(gpa, v1.EventTypeNormal, "SuccessfulRescale",
-			"old size: %d; new size: %d; min size: %d; max size: %d; reason: %s", currentReplicas, desiredReplicas, *gpa.Spec.MinReplicas, gpa.Spec.MaxReplicas, rescaleReason)
+
 		a.storeScaleEvent(gpa.Spec.Behavior, key, currentReplicas, desiredReplicas)
+		bytes, err := json.Marshal(scaleEvt)
+		if err != nil {
+			a.eventRecorder.Eventf(gpa, v1.EventTypeNormal, "SuccessfulRescale",
+				"old size: %d; new size: %d; min size: %d; max size: %d; reason: %s", currentReplicas, desiredReplicas, *gpa.Spec.MinReplicas, gpa.Spec.MaxReplicas, rescaleReason)
+		} else {
+			a.eventRecorder.Eventf(gpa, v1.EventTypeNormal, "SuccessfulRescale", string(bytes))
+		}
 		klog.Infof("Successful rescale of %s, old size: %d, new size: %d, reason: %s",
 			gpa.Name, currentReplicas, desiredReplicas, rescaleReason)
 	} else {
@@ -947,6 +988,36 @@ func (a *GeneralController) reconcileAutoscaler(gpa *autoscaling.GeneralPodAutos
 	}
 	a.setStatus(gpa, currentReplicas, desiredReplicas, metricStatuses, rescale)
 	return a.updateStatusIfNeeded(gpaStatusOriginal, gpa)
+}
+
+//calculateOnePodResources
+func (a *GeneralController) calculateOnePodResources(namespace, selectorStr string) (float32, float32, float32, float32, error) {
+	selector, err := labels.Parse(selectorStr)
+	if err != nil {
+		return 0, 0, 0, 0, err
+	}
+
+	podList, err := a.podLister.Pods(namespace).List(selector)
+	if err != nil {
+		return 0, 0, 0, 0, err
+	}
+	if podList != nil && len(podList) > 0 {
+		pod := podList[0]
+		var cpuRequests, cpuLimits, memRequests, memLimits int64
+		var totalCpuRequests, totalCpuLimits, totalMemRequests, totalMemLimits float32
+		for _, c := range pod.Spec.Containers {
+			cpuRequests += c.Resources.Requests.Cpu().MilliValue()
+			cpuLimits += c.Resources.Limits.Cpu().MilliValue()
+			memRequests += c.Resources.Requests.Memory().Value()
+			memLimits += c.Resources.Limits.Memory().Value()
+		}
+		totalCpuRequests = float32(cpuRequests)
+		totalCpuLimits = float32(cpuLimits)
+		totalMemRequests = float32(memRequests / 1024 / 1024)
+		totalMemLimits = float32(memLimits / 1024 / 1024)
+		return totalCpuRequests, totalCpuLimits, totalMemRequests, totalMemLimits, nil
+	}
+	return 0, 0, 0, 0, nil
 }
 
 func (a *GeneralController) updateLabelsIfNeeded(gpa *autoscaling.GeneralPodAutoscaler, labelMap map[string]string) error {
