@@ -934,7 +934,14 @@ func (a *GeneralController) reconcileAutoscaler(gpa *autoscaling.GeneralPodAutos
 	}
 
 	if rescale {
+		//if desiredReplicas is 0, skip to update replicas and send event
+		if desiredReplicas == 0 {
+			a.eventRecorder.Eventf(gpa, v1.EventTypeWarning, "FailedRescale",
+				"desiredReplicas=0; reason: %s; skip modify replicas", desiredReplicas, rescaleReason)
+			return fmt.Errorf("failed to rescale %s: desiredReplicas=0 skip modify replcias", reference)
+		}
 		scale.Spec.Replicas = desiredReplicas
+		klog.Infof("rescale for %s, scale info: %v", reference, scale)
 		_, err = a.scaleNamespacer.Scales(gpa.Namespace).Update(targetGR, scale)
 		if err != nil {
 			a.eventRecorder.Eventf(gpa, v1.EventTypeWarning, "FailedRescale",
