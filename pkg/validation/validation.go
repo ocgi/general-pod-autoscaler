@@ -49,7 +49,7 @@ func validateHorizontalPodAutoscalerSpec(autoscaler autoscaling.GeneralPodAutosc
 	allErrs := field.ErrorList{}
 
 	if autoscaler.AutoScalingDrivenMode.CronMetricMode != nil {
-		klog.Infof("Run validate 1")
+		klog.Infof("Run cronHpa validate")
 		if refErrs := validateCronMetric(autoscaler.AutoScalingDrivenMode.CronMetricMode, fldPath.Child("cronMetric"), minReplicasLowerBound); len(refErrs) > 0 {
 			allErrs = append(allErrs, refErrs...)
 		}
@@ -209,14 +209,13 @@ func validateCronMetric(cronMetricMode *autoscaling.CronMetricMode, fldPath *fie
 			})
 		}
 	}
-	if defaultSetNum > 1 {
+	if defaultSetNum != 1 {
 		allErrs = append(allErrs, field.Forbidden(fldPath.Child("cronMetrics"), "only one `default` schedule cronMetrics should set"))
 	}
 	for i := 0; i <= len(setSlice); i++ {
 		for j := i + 1; j < len(setSlice); j++ {
 			IntersectSet := setSlice[i].set.Intersect(setSlice[j].set)
 			if IntersectSet.Cardinality() > 0 {
-				klog.Infof("Run validate 2")
 				allErrs = append(allErrs, field.Forbidden(fldPath.Child("schedule"), fmt.Sprintf("schedule time conflict, schedule: %s conflict with %s",
 					setSlice[i].schedule, setSlice[j].schedule)))
 				break

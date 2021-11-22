@@ -937,7 +937,7 @@ func (a *GeneralController) reconcileAutoscaler(gpa *autoscaling.GeneralPodAutos
 		//if desiredReplicas is 0, skip to update replicas and send event
 		if desiredReplicas == 0 {
 			a.eventRecorder.Eventf(gpa, v1.EventTypeWarning, "FailedRescale",
-				"desiredReplicas=0; reason: %s; skip modify replicas", desiredReplicas, rescaleReason)
+				"desiredReplicas: %d; reason: %s; skip modify replicas", desiredReplicas, rescaleReason)
 			return fmt.Errorf("failed to rescale %s: desiredReplicas=0 skip modify replcias", reference)
 		}
 		scale.Spec.Replicas = desiredReplicas
