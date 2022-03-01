@@ -170,6 +170,7 @@ func validateCronMetric(cronMetricMode *autoscaling.CronMetricMode, fldPath *fie
 	start := time.Now()
 	setSlice := make([]CronSet, 0)
 	var defaultSetNum int
+	defaultCronSpec := make([]autoscaling.CronMetricSpec, 0)
 	for _, cronRange := range cronMetricMode.CronMetrics {
 		if cronRange.MinReplicas != nil && *cronRange.MinReplicas < minReplicasLowerBound {
 			allErrs = append(allErrs, field.Invalid(fldPath.Child("minReplicas"), *cronRange.MinReplicas,
@@ -187,6 +188,7 @@ func validateCronMetric(cronMetricMode *autoscaling.CronMetricMode, fldPath *fie
 			if cronRange.Schedule == "default" {
 				//default cron set, ignore conflict check
 				defaultSetNum += 1
+				defaultCronSpec = append(defaultCronSpec, cronRange)
 				continue
 			}
 			sch, err := cron.ParseStandard(cronRange.Schedule)
@@ -209,9 +211,17 @@ func validateCronMetric(cronMetricMode *autoscaling.CronMetricMode, fldPath *fie
 			})
 		}
 	}
-	if defaultSetNum != 1 {
-		allErrs = append(allErrs, field.Forbidden(fldPath.Child("cronMetrics"), "only one `default` schedule cronMetrics should set"))
+	if defaultSetNum > 2 {
+		allErrs = append(allErrs, field.Forbidden(fldPath.Child("cronMetrics"), "only two or one `default` schedule cronMetrics should set"))
+	} else if defaultSetNum == 2 {
+		first := defaultCronSpec[0]
+		two := defaultCronSpec[1]
+		if first.MaxReplicas != two.MaxReplicas || first.MinReplicas != two.MinReplicas {
+			allErrs = append(allErrs, field.Forbidden(fldPath.Child("cronMetrics"), "two `default` schedule"+
+				" cronMetrics must with same minReplicates and maxReplicates set"))
+		}
 	}
+
 	for i := 0; i <= len(setSlice); i++ {
 		for j := i + 1; j < len(setSlice); j++ {
 			IntersectSet := setSlice[i].set.Intersect(setSlice[j].set)
