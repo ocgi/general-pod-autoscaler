@@ -218,9 +218,7 @@ func validateCronMetric(cronMetricMode *autoscaling.CronMetricMode, fldPath *fie
 	} else if defaultSetNum == 2 {
 		first := defaultCronSpec[0]
 		two := defaultCronSpec[1]
-		if first.MaxReplicas == two.MaxReplicas && first.MinReplicas == two.MinReplicas {
-			fmt.Sprintf("two default with same min and max alowned")
-		}else {
+		if first.MaxReplicas != two.MaxReplicas || first.MinReplicas != two.MinReplicas {
 			allErrs = append(allErrs, field.Forbidden(fldPath.Child("cronMetrics"), "two `default` schedule"+
 				" cronMetrics must with same minReplicates and maxReplicates set"))
 		}
@@ -229,7 +227,6 @@ func validateCronMetric(cronMetricMode *autoscaling.CronMetricMode, fldPath *fie
 		for j := i + 1; j < len(setSlice); j++ {
 			if setSlice[i].Type != setSlice[j].Type && setSlice[i].schedule == setSlice[j].schedule {
 				// ignore cpu and mem set with same schedule
-				fmt.Sprintf("cpu and mem with same schedule is alowned")
 				continue
 			}
 			IntersectSet := setSlice[i].set.Intersect(setSlice[j].set)
