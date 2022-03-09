@@ -172,6 +172,7 @@ func validateCronMetric(cronMetricMode *autoscaling.CronMetricMode, fldPath *fie
 	setSlice := make([]CronSet, 0)
 	var defaultSetNum int
 	defaultCronSpec := make([]autoscaling.CronMetricSpec, 0)
+	klog.Infof("webhook cronMetrics: %v", cronMetricMode.CronMetrics)
 	for _, cronRange := range cronMetricMode.CronMetrics {
 		if cronRange.MinReplicas != nil && *cronRange.MinReplicas < minReplicasLowerBound {
 			allErrs = append(allErrs, field.Invalid(fldPath.Child("minReplicas"), *cronRange.MinReplicas,
@@ -218,6 +219,7 @@ func validateCronMetric(cronMetricMode *autoscaling.CronMetricMode, fldPath *fie
 	} else if defaultSetNum == 2 {
 		first := defaultCronSpec[0]
 		two := defaultCronSpec[1]
+		klog.Infof("first: %v, two: %v", first, two)
 		if first.MaxReplicas != two.MaxReplicas || first.MinReplicas != two.MinReplicas {
 			allErrs = append(allErrs, field.Forbidden(fldPath.Child("cronMetrics"), "two `default` schedule"+
 				" cronMetrics must with same minReplicates and maxReplicates set"))
