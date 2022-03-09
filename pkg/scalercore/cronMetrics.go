@@ -137,6 +137,7 @@ func (s *CronMetricsScaler) getFinalMatchAndMisMatch(gpa *v1alpha1.GeneralPodAut
 		match = t
 		break
 	}
+	klog.Infof("misMatch: %s, match: %s", misMatch, match)
 	// fix bug: misMatch diff s.now < 1 ,but match diff s.now > 1
 	if s.now.Sub(misMatch).Minutes() <= 1 && s.now.After(misMatch) && match.Sub(s.now).Minutes() < 1 {
 		return &misMatch, &match, nil
