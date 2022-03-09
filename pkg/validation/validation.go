@@ -220,7 +220,7 @@ func validateCronMetric(cronMetricMode *autoscaling.CronMetricMode, fldPath *fie
 		first := defaultCronSpec[0]
 		two := defaultCronSpec[1]
 		klog.Infof("first: %v, two: %v", first, two)
-		if first.MaxReplicas != two.MaxReplicas || first.MinReplicas != two.MinReplicas {
+		if first.MaxReplicas != two.MaxReplicas || *first.MinReplicas != *two.MinReplicas {
 			allErrs = append(allErrs, field.Forbidden(fldPath.Child("cronMetrics"), "two `default` schedule"+
 				" cronMetrics must with same minReplicates and maxReplicates set"))
 		}
