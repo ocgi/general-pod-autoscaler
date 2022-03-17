@@ -1,5 +1,5 @@
-//module github.com/ocgi/general-pod-autoscaler
-module github.com/twilight327426371/general-pod-autoscaler
+module github.com/ocgi/general-pod-autoscaler
+//module github.com/twilight327426371/general-pod-autoscaler
 
 go 1.14
 
