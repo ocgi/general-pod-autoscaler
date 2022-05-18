@@ -16,6 +16,7 @@
 package scaler
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"reflect"
@@ -819,7 +820,7 @@ func (a *GeneralController) reconcileAutoscaler(gpa *autoscaling.GeneralPodAutos
 
 	if rescale {
 		scale.Spec.Replicas = desiredReplicas
-		_, err = a.scaleNamespacer.Scales(gpa.Namespace).Update(targetGR, scale)
+		_, err = a.scaleNamespacer.Scales(gpa.Namespace).Update(context.TODO(), targetGR, scale, metav1.UpdateOptions{})
 		if err != nil {
 			a.eventRecorder.Eventf(gpa, v1.EventTypeWarning, "FailedRescale",
 				"New size: %d; reason: %s; error: %v", desiredReplicas, rescaleReason, err.Error())
@@ -870,7 +871,8 @@ func (a *GeneralController) updateLabelsIfNeeded(gpa *autoscaling.GeneralPodAuto
 	if apiequality.Semantic.DeepEqual(gpa, gpaCopy) {
 		return nil
 	}
-	gpaCopy, err = a.gpaNamespacer.GeneralPodAutoscalers(gpa.Namespace).Patch(gpa.Name, types.MergePatchType, patch)
+	gpaCopy, err = a.gpaNamespacer.GeneralPodAutoscalers(gpa.Namespace).Patch(context.TODO(), gpa.Name,
+		types.MergePatchType, patch, metav1.PatchOptions{})
 	if err == nil {
 		gpa = gpaCopy
 		return nil
@@ -1303,7 +1305,7 @@ func (a *GeneralController) scaleForResourceMappings(namespace, name string,
 	var firstErr error
 	for i, mapping := range mappings {
 		targetGR := mapping.Resource.GroupResource()
-		scale, err := a.scaleNamespacer.Scales(namespace).Get(targetGR, name)
+		scale, err := a.scaleNamespacer.Scales(namespace).Get(context.TODO(), targetGR, name, metav1.GetOptions{})
 		if err == nil {
 			return scale, targetGR, nil
 		}
@@ -1359,13 +1361,13 @@ func (a *GeneralController) updateStatusIfNeeded(oldStatus *autoscaling.GeneralP
 	if err == nil {
 		return nil
 	}
-	_, err = a.gpaNamespacer.GeneralPodAutoscalers(newGPA.Namespace).Update(newGPA)
+	_, err = a.gpaNamespacer.GeneralPodAutoscalers(newGPA.Namespace).Update(context.TODO(), newGPA, metav1.UpdateOptions{})
 	return err
 }
 
 // updateStatus actually does the update request for the status of the given GPA
 func (a *GeneralController) updateStatus(gpa *autoscaling.GeneralPodAutoscaler) error {
-	_, err := a.gpaNamespacer.GeneralPodAutoscalers(gpa.Namespace).UpdateStatus(gpa)
+	_, err := a.gpaNamespacer.GeneralPodAutoscalers(gpa.Namespace).UpdateStatus(context.TODO(), gpa, metav1.UpdateOptions{})
 	if err != nil {
 		a.eventRecorder.Event(gpa, v1.EventTypeWarning, "FailedUpdateStatus", err.Error())
 		return fmt.Errorf("failed to update status for %s: %v", gpa.Name, err)
@@ -1377,7 +1379,8 @@ func (a *GeneralController) updateStatus(gpa *autoscaling.GeneralPodAutoscaler) 
 // pathStatus actually does the patch request for the status of the given GPA
 // do this because updateStatus is not supported by crd
 func (a *GeneralController) pathStatus(gpa *autoscaling.GeneralPodAutoscaler, patch []byte) error {
-	_, err := a.gpaNamespacer.GeneralPodAutoscalers(gpa.Namespace).Patch(gpa.Name, types.MergePatchType, patch)
+	_, err := a.gpaNamespacer.GeneralPodAutoscalers(gpa.Namespace).Patch(context.TODO(), gpa.Name,
+		types.MergePatchType, patch, metav1.PatchOptions{})
 	if err != nil {
 		a.eventRecorder.Event(gpa, v1.EventTypeWarning, "FailedUpdateStatus", err.Error())
 		return fmt.Errorf("failed to update status for %s: %v", gpa.Name, err)

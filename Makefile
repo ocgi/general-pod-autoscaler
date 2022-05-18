@@ -26,7 +26,7 @@ all: test build
 build: vet fmt build-gpa
 
 build-gpa:
-	CGO_ENABLED=0 GOOS=linux go build -ldflags "-X '$(VERSION_KEY)=$(VERSION)' -X '$(COMMIT_KEY)=$(GIT_COMMIT)'" -o ./bin/gpa ./cmd/gpa
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "-X '$(VERSION_KEY)=$(VERSION)' -X '$(COMMIT_KEY)=$(GIT_COMMIT)'" -o ./bin/gpa ./cmd/gpa
 
 container: build
 	docker build -t $(REGISTRY_NAME)/gpa:$(VERSION) -f $(shell if [ -e ./cmd/gpa/Dockerfile ]; then echo ./cmd/gpa/Dockerfile; else echo Dockerfile; fi) --label revision=$(REV) .
