@@ -156,7 +156,7 @@ func ValidateHorizontalPodAutoscalerStatusUpdate(newAutoscaler, oldAutoscaler *a
 // CronMetric set to check conflict
 type CronSet struct {
 	schedule string
-	Type string
+	Type     string
 	set      mapset.Set
 }
 
@@ -214,6 +214,7 @@ func validateCronMetric(cronMetricMode *autoscaling.CronMetricMode, fldPath *fie
 			})
 		}
 	}
+	// allow set two default, but min and max need same
 	if defaultSetNum > 2 {
 		allErrs = append(allErrs, field.Forbidden(fldPath.Child("cronMetrics"), "only two or one `default` schedule cronMetrics should set"))
 	} else if defaultSetNum == 2 {
@@ -224,6 +225,10 @@ func validateCronMetric(cronMetricMode *autoscaling.CronMetricMode, fldPath *fie
 			allErrs = append(allErrs, field.Forbidden(fldPath.Child("cronMetrics"), "two `default` schedule"+
 				" cronMetrics must with same minReplicates and maxReplicates set"))
 		}
+	}
+	// not set default is forbidden
+	if defaultSetNum <= 0 {
+		allErrs = append(allErrs, field.Forbidden(fldPath.Child("cronMetrics"), "only two or one `default` schedule cronMetrics should set"))
 	}
 	for i := 0; i <= len(setSlice); i++ {
 		for j := i + 1; j < len(setSlice); j++ {
