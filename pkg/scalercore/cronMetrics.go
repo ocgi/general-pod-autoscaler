@@ -78,7 +78,7 @@ func (s *CronMetricsScaler) GetReplicas(gpa *v1alpha1.GeneralPodAutoscaler, curr
 func (s *CronMetricsScaler) GetCurrentMaxAndMinReplicas(gpa *v1alpha1.GeneralPodAutoscaler) (int32, int32, string) {
 	var max, min int32
 	if s.defaultSet.MaxReplicas == 0 && s.defaultSet.MinReplicas == nil {
-		klog.Error("gpa %v not set default scheduler", gpa)
+		klog.Errorf("gpa %v not set default scheduler", gpa)
 		return 2, 4, "default empty"
 	}
 	//use defaultSet max min replicas
@@ -141,12 +141,8 @@ func (s *CronMetricsScaler) getFinalMatchAndMisMatch(gpa *v1alpha1.GeneralPodAut
 		match = t
 		break
 	}
-	klog.Infof("misMatch: %s, match: %s", misMatch, match)
-
 	// fix bug: misMatch diff s.now < 1 ,but match diff s.now > 1
-	//if s.now.Sub(misMatch).Minutes() <= 1 && s.now.After(misMatch) && match.Sub(s.now).Minutes() < 1 {
-	// 1-3 11 * * * , misMatch 11:03:55, now is 11:04:30 , not check minute value, then run cronHpa
-	if s.now.Sub(misMatch).Minutes() <= 1 && s.now.After(misMatch) && s.now.Minute() == misMatch.Minute() {
+	if s.now.Sub(misMatch).Minutes() < 1 && s.now.After(misMatch) && match.Sub(s.now).Minutes() < 1 {
 		return &misMatch, &match, nil
 	}
 
