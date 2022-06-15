@@ -77,6 +77,10 @@ func (s *CronMetricsScaler) GetReplicas(gpa *v1alpha1.GeneralPodAutoscaler, curr
 // get current cron config max and min replicas
 func (s *CronMetricsScaler) GetCurrentMaxAndMinReplicas(gpa *v1alpha1.GeneralPodAutoscaler) (int32, int32, string) {
 	var max, min int32
+	if s.defaultSet.MaxReplicas == 0 && s.defaultSet.MinReplicas == nil {
+		klog.Error("gpa %v not set default scheduler", gpa)
+		return 2, 4, "default empty"
+	}
 	//use defaultSet max min replicas
 	max = s.defaultSet.MaxReplicas
 	min = *s.defaultSet.MinReplicas
