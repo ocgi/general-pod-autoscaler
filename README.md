@@ -300,20 +300,48 @@ EOF
 apiVersion: autoscaling.ocgi.dev/v1alpha1
 kind: GeneralPodAutoscaler
 metadata:
-  name: pa-test1
+  labels:
+    app: online-release-v2
+    env: release
+  name: online-release-v2
+  namespace: hansen
 spec:
-  maxReplicas: 8
-  minReplicas: 2
+  cronMetric:
+    cronMetrics:
+    - containerResource:
+        container: online-release-v2
+        name: cpu
+        target:
+          averageUtilization: 50
+          type: Utilization
+      maxReplicas: 80
+      minReplicas: 10
+      schedule: default
+      type: ContainerResource
+    - containerResource:
+        container: online-release-v2
+        name: cpu
+        target:
+          averageUtilization: 50
+          type: Utilization
+      maxReplicas: 100
+      minReplicas: 30
+      schedule: '* 19-21 * * 5,6'
+      type: ContainerResource
+    - containerResource:
+        container: online-release-v2
+        name: cpu
+        target:
+          averageUtilization: 50
+          type: Utilization
+      maxReplicas: 100
+      minReplicas: 30
+      schedule: '0-14 22 * * 5,6'
+      type: ContainerResource
   scaleTargetRef:
-    apiVersion: carrier.ocgi.dev/v1alpha1
-    kind: Squad
-    name: squad-example
-  time:
-    ranges:
-    - desiredReplicas: 4
-      schedule: '*/1 2-3 * * *'
-    - desiredReplicas: 6
-      schedule: '*/1 4-5 * * *'
+    apiVersion: apps/v1
+    kind: deployment
+    name: online-release-v2
 EOF
 
 # kubectl get pa pa-squad
