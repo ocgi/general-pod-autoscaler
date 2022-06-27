@@ -49,7 +49,7 @@ func validateHorizontalPodAutoscalerSpec(autoscaler autoscaling.GeneralPodAutosc
 	allErrs := field.ErrorList{}
 
 	if autoscaler.AutoScalingDrivenMode.CronMetricMode != nil {
-		klog.Infof("Run validate 1")
+		klog.Infof("Run cronHpa validate")
 		if refErrs := validateCronMetric(autoscaler.AutoScalingDrivenMode.CronMetricMode, fldPath.Child("cronMetric"), minReplicasLowerBound); len(refErrs) > 0 {
 			allErrs = append(allErrs, refErrs...)
 		}
@@ -156,6 +156,7 @@ func ValidateHorizontalPodAutoscalerStatusUpdate(newAutoscaler, oldAutoscaler *a
 // CronMetric set to check conflict
 type CronSet struct {
 	schedule string
+	Type     string
 	set      mapset.Set
 }
 
@@ -170,6 +171,8 @@ func validateCronMetric(cronMetricMode *autoscaling.CronMetricMode, fldPath *fie
 	start := time.Now()
 	setSlice := make([]CronSet, 0)
 	var defaultSetNum int
+	defaultCronSpec := make([]autoscaling.CronMetricSpec, 0)
+	klog.Infof("webhook cronMetrics: %v", cronMetricMode.CronMetrics)
 	for _, cronRange := range cronMetricMode.CronMetrics {
 		if cronRange.MinReplicas != nil && *cronRange.MinReplicas < minReplicasLowerBound {
 			allErrs = append(allErrs, field.Invalid(fldPath.Child("minReplicas"), *cronRange.MinReplicas,
@@ -187,6 +190,7 @@ func validateCronMetric(cronMetricMode *autoscaling.CronMetricMode, fldPath *fie
 			if cronRange.Schedule == "default" {
 				//default cron set, ignore conflict check
 				defaultSetNum += 1
+				defaultCronSpec = append(defaultCronSpec, cronRange)
 				continue
 			}
 			sch, err := cron.ParseStandard(cronRange.Schedule)
@@ -205,18 +209,35 @@ func validateCronMetric(cronMetricMode *autoscaling.CronMetricMode, fldPath *fie
 			}
 			setSlice = append(setSlice, CronSet{
 				cronRange.Schedule,
+				string(cronRange.ContainerResource.Name),
 				schSet,
 			})
 		}
 	}
-	if defaultSetNum > 1 {
-		allErrs = append(allErrs, field.Forbidden(fldPath.Child("cronMetrics"), "only one `default` schedule cronMetrics should set"))
+	// allow set two default, but min and max need same
+	if defaultSetNum > 2 {
+		allErrs = append(allErrs, field.Forbidden(fldPath.Child("cronMetrics"), "only two or one `default` schedule cronMetrics should set"))
+	} else if defaultSetNum == 2 {
+		first := defaultCronSpec[0]
+		two := defaultCronSpec[1]
+		klog.Infof("first: %v, two: %v", first, two)
+		if first.MaxReplicas != two.MaxReplicas || *first.MinReplicas != *two.MinReplicas {
+			allErrs = append(allErrs, field.Forbidden(fldPath.Child("cronMetrics"), "two `default` schedule"+
+				" cronMetrics must with same minReplicates and maxReplicates set"))
+		}
+	}
+	// not set default is forbidden
+	if defaultSetNum <= 0 {
+		allErrs = append(allErrs, field.Forbidden(fldPath.Child("cronMetrics"), "only two or one `default` schedule cronMetrics should set"))
 	}
 	for i := 0; i <= len(setSlice); i++ {
 		for j := i + 1; j < len(setSlice); j++ {
+			if setSlice[i].Type != setSlice[j].Type && setSlice[i].schedule == setSlice[j].schedule {
+				// ignore cpu and mem set with same schedule
+				continue
+			}
 			IntersectSet := setSlice[i].set.Intersect(setSlice[j].set)
 			if IntersectSet.Cardinality() > 0 {
-				klog.Infof("Run validate 2")
 				allErrs = append(allErrs, field.Forbidden(fldPath.Child("schedule"), fmt.Sprintf("schedule time conflict, schedule: %s conflict with %s",
 					setSlice[i].schedule, setSlice[j].schedule)))
 				break
